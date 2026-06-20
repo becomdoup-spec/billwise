@@ -13,12 +13,24 @@ interface PortionSliderProps {
   onCancel: () => void
 }
 
-const STEP = 5
+const STEP = 1
 const NOTCH_EVERY = 10
 
 function snap(value: number, max: number) {
   const stepped = Math.round(value / STEP) * STEP
   return Math.min(Math.max(0, stepped), max)
+}
+
+function round(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+function formatPercentage(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function amountInputValue(value: number) {
+  return value > 0 ? round(value).toString() : ''
 }
 
 export function PortionSlider({
@@ -29,21 +41,37 @@ export function PortionSlider({
   onConfirm,
   onCancel,
 }: PortionSliderProps) {
-  const otherPortionsTotal = otherSelections.reduce((s, x) => s + x.portionPercentage, 0)
-  const maxPortion = Math.max(STEP, 100 - otherPortionsTotal + currentPortion)
-  const [portion, setPortion] = useState(() => snap(currentPortion || Math.max(STEP, 100 - otherPortionsTotal), maxPortion))
+  const otherFixedPortions = otherSelections
+    .filter((selection) => selection.portionPercentage < 100)
+    .reduce((sum, selection) => sum + selection.portionPercentage, 0)
+  const maxPortion = Math.max(STEP, round(100 - otherFixedPortions))
+  const [portion, setPortion] = useState(() => snap(currentPortion || maxPortion, maxPortion))
+  const [amountInput, setAmountInput] = useState(() => amountInputValue(item.totalPrice * (portion / 100)))
   const [animKey, setAnimKey] = useState(0)
   const trackRef = useRef<HTMLDivElement>(null)
 
   const amount = item.totalPrice * (portion / 100)
   const remaining = maxPortion - portion
 
-  const presets = [25, 33, 50, 67, 75, 100].filter((p) => p <= maxPortion && p % STEP === 0 || p <= maxPortion)
+  const presets = [25, 33, 50, 67, 75, 100].filter((preset) => preset <= maxPortion)
 
   const setPortionAnimated = useCallback((v: number) => {
-    setPortion(snap(v, maxPortion))
+    const nextPortion = snap(v, maxPortion)
+    setPortion(nextPortion)
+    setAmountInput(amountInputValue(item.totalPrice * (nextPortion / 100)))
     setAnimKey((k) => k + 1)
-  }, [maxPortion])
+  }, [item.totalPrice, maxPortion])
+
+  const setAbsoluteAmount = (rawValue: string) => {
+    setAmountInput(rawValue)
+    const enteredAmount = Number(rawValue)
+    if (!rawValue || !Number.isFinite(enteredAmount) || item.totalPrice <= 0) return
+    const maxAmount = item.totalPrice * (maxPortion / 100)
+    const boundedAmount = Math.min(Math.max(0, enteredAmount), maxAmount)
+    const calculatedPortion = round((boundedAmount / item.totalPrice) * 100)
+    setPortion(calculatedPortion)
+    setAnimKey((key) => key + 1)
+  }
 
   // Notch marks along the track
   const notchCount = Math.floor(maxPortion / NOTCH_EVERY)
@@ -67,7 +95,7 @@ export function PortionSlider({
           className="text-6xl font-bold tabular-nums anim-amount-change inline-block"
           style={{ color: accentColor }}
         >
-          {portion}%
+          {formatPercentage(portion)}%
         </div>
         <p className="text-sm text-zinc-400 mt-1.5">
           = <span className="text-white font-semibold">{formatCurrency(amount)}</span>
@@ -75,6 +103,35 @@ export function PortionSlider({
         {remaining > 0 && remaining < maxPortion && (
           <p className="text-xs text-zinc-600 mt-1">{remaining}% unallocated</p>
         )}
+      </div>
+
+      {/* Absolute amount entry */}
+      <div className="bg-surface-2 border border-border rounded-xl p-3 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-zinc-300">Enter your amount</p>
+            <p className="text-[10px] text-zinc-600 mt-0.5">Percentage is calculated automatically</p>
+          </div>
+          <div className="relative w-32">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">₹</span>
+            <input
+              type="number"
+              min={0}
+              max={round(item.totalPrice * (maxPortion / 100))}
+              step="0.01"
+              inputMode="decimal"
+              value={amountInput}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => setAbsoluteAmount(event.target.value)}
+              onBlur={() => setAmountInput(amountInputValue(amount))}
+              className="w-full bg-surface-1 border border-border rounded-lg pl-7 pr-2 py-2 text-sm text-white text-right focus:outline-none focus:border-brand/60"
+              aria-label="Your absolute amount for this item"
+            />
+          </div>
+        </div>
+        <p className="text-[10px] text-zinc-500 text-right">
+          {amountInput || '0'} of {formatCurrency(item.totalPrice)} = {formatPercentage(portion)}%
+        </p>
       </div>
 
       {/* Others who selected this item */}
@@ -178,7 +235,7 @@ export function PortionSlider({
           className="flex-[2] py-3 rounded-xl text-sm font-semibold text-surface-0 transition-all active:scale-95 disabled:bg-surface-3 disabled:text-zinc-600"
           style={portion > 0 ? { background: accentColor } : {}}
         >
-          Set {portion}%
+          Set {formatPercentage(portion)}%
         </button>
       </div>
     </div>
