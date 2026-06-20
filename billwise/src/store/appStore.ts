@@ -17,6 +17,8 @@ interface AppStore {
   billItems: Record<string, BillItem[]>
   selections: ItemSelection[]
   apiKey: string
+  cloudReady: boolean
+  cloudSyncError: string
 
   // Auth
   currentUser: User | null
@@ -28,7 +30,7 @@ interface AppStore {
 
   // User management
   addUser: (name: string, pin: string, role: 'admin' | 'user') => Promise<User>
-  updateUserPin: (userId: string, newPin: string) => void
+  updateUserPin: (userId: string, newPin: string) => Promise<void>
   deleteUser: (userId: string) => void
 
   // Session management
@@ -44,7 +46,7 @@ interface AppStore {
   setBillItems: (sessionId: string, items: BillItem[]) => Promise<void>
   setBillItemsForSession: (sessionId: string, items: BillItem[]) => void
   addBillItem: (sessionId: string, item: Omit<BillItem, 'id' | 'sessionId'>) => BillItem
-  updateBillItem: (sessionId: string, itemId: string, data: Partial<BillItem>) => void
+  updateBillItem: (sessionId: string, itemId: string, data: Partial<BillItem>) => Promise<void>
   removeBillItem: (sessionId: string, itemId: string) => void
 
   // Selections
@@ -57,6 +59,7 @@ interface AppStore {
 
   // Supabase sync helpers (called by hooks)
   hydrateFromSupabase: (users: User[], sessions: Session[]) => void
+  setCloudSyncState: (ready: boolean, error?: string) => void
   hydrateBillItemsFromSupabase: (items: BillItem[]) => void
   updateSessionFromRealtime: (sessionId: string, data: Partial<Session>) => void
   setSelectionsForSession: (sessionId: string, sels: ItemSelection[]) => void
@@ -78,6 +81,8 @@ export const useAppStore = create<AppStore>()(
       billItems: {},
       selections: [],
       apiKey: '',
+      cloudReady: !supabase,
+      cloudSyncError: '',
       currentUser: null,
 
       setCurrentUser: (user) => set({ currentUser: user }),
@@ -114,17 +119,18 @@ export const useAppStore = create<AppStore>()(
           role,
           createdAt: new Date().toISOString(),
         }
-        set((s) => ({ users: [...s.users, user] }))
         await dbCreateUser(user)
+        set((s) => ({ users: [...s.users.filter((u) => u.id !== user.id), user] }))
         return user
       },
 
-      updateUserPin: (userId, newPin) => {
+      updateUserPin: async (userId, newPin) => {
         const hashed = hashPin(newPin)
+        await dbUpdateUserPin(userId, hashed)
         set((s) => ({
           users: s.users.map((u) => u.id === userId ? { ...u, pin: hashed } : u),
+          currentUser: s.currentUser?.id === userId ? { ...s.currentUser, pin: hashed } : s.currentUser,
         }))
-        dbUpdateUserPin(userId, hashed)
       },
 
       deleteUser: (userId) => {
@@ -153,8 +159,8 @@ export const useAppStore = create<AppStore>()(
           lockedParticipantIds: [],
           createdAt: new Date().toISOString(),
         }
-        set((s) => ({ sessions: [...s.sessions, session] }))
         await dbCreateSession(session)
+        set((s) => ({ sessions: [...s.sessions.filter((item) => item.id !== session.id), session] }))
         return session
       },
 
@@ -191,6 +197,7 @@ export const useAppStore = create<AppStore>()(
       },
 
       addParticipant: async (sessionId, userId) => {
+        await dbAddParticipant(sessionId, userId)
         set((s) => ({
           sessions: s.sessions.map((sess) =>
             sess.id === sessionId && !sess.participantIds.includes(userId)
@@ -198,7 +205,6 @@ export const useAppStore = create<AppStore>()(
               : sess,
           ),
         }))
-        await dbAddParticipant(sessionId, userId)
       },
 
       removeParticipant: (sessionId, userId) => {
@@ -229,8 +235,8 @@ export const useAppStore = create<AppStore>()(
       },
 
       setBillItems: async (sessionId, items) => {
-        set((s) => ({ billItems: { ...s.billItems, [sessionId]: items } }))
         await dbSetBillItems(sessionId, items)
+        set((s) => ({ billItems: { ...s.billItems, [sessionId]: items } }))
       },
 
       setBillItemsForSession: (sessionId, items) => {
@@ -248,7 +254,8 @@ export const useAppStore = create<AppStore>()(
         return newItem
       },
 
-      updateBillItem: (sessionId, itemId, data) => {
+      updateBillItem: async (sessionId, itemId, data) => {
+        await dbUpdateBillItem(itemId, data)
         set((s) => ({
           billItems: {
             ...s.billItems,
@@ -257,7 +264,6 @@ export const useAppStore = create<AppStore>()(
             ),
           },
         }))
-        dbUpdateBillItem(itemId, data)
       },
 
       removeBillItem: (sessionId, itemId) => {
@@ -358,8 +364,8 @@ export const useAppStore = create<AppStore>()(
 
       hydrateFromSupabase: (users, sessions) => {
         set((s) => {
-          // Merge: Supabase is source of truth for users/sessions, but keep local admin seed
-          const mergedUsers = users.length ? users : s.users
+          // Supabase is the source of truth whenever it is configured.
+          const mergedUsers = users.length ? users : SEED_USERS
           const mergedSessions = sessions
 
           // Re-validate currentUser against fresh users list
@@ -367,9 +373,17 @@ export const useAppStore = create<AppStore>()(
             ? mergedUsers.find((u) => u.id === s.currentUser!.id) ?? s.currentUser
             : null
 
-          return { users: mergedUsers, sessions: mergedSessions, currentUser: refreshedCurrentUser }
+          return {
+            users: mergedUsers,
+            sessions: mergedSessions,
+            currentUser: refreshedCurrentUser,
+            cloudReady: true,
+            cloudSyncError: '',
+          }
         })
       },
+
+      setCloudSyncState: (ready, error = '') => set({ cloudReady: ready, cloudSyncError: error }),
 
       hydrateBillItemsFromSupabase: (items) => {
         const billItems = items.reduce<Record<string, BillItem[]>>((grouped, item) => {

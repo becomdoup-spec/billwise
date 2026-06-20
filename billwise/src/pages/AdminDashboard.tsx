@@ -10,8 +10,8 @@ import { UserManager } from '../components/admin/UserManager'
 import { Modal } from '../components/shared/Modal'
 import { toast } from '../components/shared/Toast'
 import { useAppStore } from '../store/appStore'
-import type { Session } from '../types'
-import { formatCurrency } from '../services/calculations'
+import type { Session, User } from '../types'
+import { formatCurrency, hashPin } from '../services/calculations'
 import clsx from 'clsx'
 
 type Tab = 'sessions' | 'users' | 'settings'
@@ -144,6 +144,7 @@ export function AdminDashboard() {
                 </div>
               </div>
             </div>
+            <AdminPasswordSettings />
             <div className="bg-surface-1 rounded-2xl border border-border p-4">
               <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-3">App Info</p>
               <div className="space-y-2 text-sm">
@@ -194,6 +195,71 @@ export function AdminDashboard() {
   )
 }
 
+function AdminPasswordSettings() {
+  const { currentUser, updateUserPin } = useAppStore()
+  const [currentPin, setCurrentPin] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const updatePin = async () => {
+    if (!currentUser || hashPin(currentPin) !== currentUser.pin) {
+      toast.error('Current admin PIN is incorrect')
+      return
+    }
+    if (newPin.length !== 4) {
+      toast.error('New PIN must be 4 digits')
+      return
+    }
+    if (newPin !== confirmPin) {
+      toast.error('New PINs do not match')
+      return
+    }
+    setSaving(true)
+    try {
+      await updateUserPin(currentUser.id, newPin)
+      setCurrentPin(''); setNewPin(''); setConfirmPin('')
+      toast.success('Your admin PIN was updated on every device')
+    } catch {
+      toast.error('Admin PIN could not be saved to the cloud')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const pinInput = (value: string, onChange: (value: string) => void, placeholder: string) => (
+    <input
+      type="password"
+      inputMode="numeric"
+      value={value}
+      onChange={(event) => onChange(event.target.value.replace(/\D/g, '').slice(0, 4))}
+      placeholder={placeholder}
+      className="w-full bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-brand/60 font-mono tracking-widest"
+    />
+  )
+
+  return (
+    <div className="bg-surface-1 rounded-2xl border border-border overflow-hidden">
+      <div className="px-4 py-3 border-b border-border">
+        <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Security · My Admin PIN</p>
+      </div>
+      <div className="p-4 space-y-3">
+        {pinInput(currentPin, setCurrentPin, 'Current PIN')}
+        {pinInput(newPin, setNewPin, 'New 4-digit PIN')}
+        {pinInput(confirmPin, setConfirmPin, 'Confirm new PIN')}
+        <button
+          onClick={updatePin}
+          disabled={saving}
+          className="w-full py-3 bg-brand hover:bg-brand-light disabled:opacity-60 rounded-xl text-sm font-semibold text-surface-0 transition-all"
+        >
+          {saving ? 'Saving…' : 'Update My PIN'}
+        </button>
+        <p className="text-xs text-zinc-600">Other admin and member PINs can be reset from the Members tab.</p>
+      </div>
+    </div>
+  )
+}
+
 // ── Admin session card with visibility toggle ──────────────────
 
 const statusConfig = {
@@ -201,8 +267,6 @@ const statusConfig = {
   locked: { icon: Clock, label: 'Active', className: 'text-yellow-400' },
   completed: { icon: CheckCircle, label: 'Done', className: 'text-green-400' },
 }
-
-import type { User } from '../types'
 
 function AdminSessionCard({
   session, users, onClick, onTogglePublic, onDelete,

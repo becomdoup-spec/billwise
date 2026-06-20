@@ -69,7 +69,7 @@ function rowToSelection(r: Record<string, unknown>): ItemSelection {
 export async function dbGetUsers(): Promise<User[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from('users').select('*').order('created_at')
-  if (error) { console.error('[db] getUsers', error); return [] }
+  if (error) { console.error('[db] getUsers', error); throw error }
   return (data ?? []).map(rowToUser)
 }
 
@@ -89,7 +89,8 @@ export async function dbCreateUser(user: User): Promise<void> {
 
 export async function dbUpdateUserPin(userId: string, pinHash: string): Promise<void> {
   if (!supabase) return
-  await supabase.from('users').update({ pin_hash: pinHash }).eq('id', userId)
+  const { error } = await supabase.from('users').update({ pin_hash: pinHash }).eq('id', userId)
+  if (error) { console.error('[db] updateUserPin', error); throw error }
 }
 
 export async function dbDeleteUser(userId: string): Promise<void> {
@@ -105,14 +106,14 @@ export async function dbGetSessions(): Promise<Session[]> {
     supabase.from('sessions').select('*').order('created_at', { ascending: false }),
     supabase.from('session_participants').select('session_id, user_id, locked_at'),
   ])
-  if (sessRes.error) { console.error('[db] getSessions', sessRes.error); return [] }
+  if (sessRes.error) { console.error('[db] getSessions', sessRes.error); throw sessRes.error }
 
   let partRes = lockedPartRes
   if (lockedPartRes.error?.code === '42703') {
     console.error('[db] session_participants.locked_at is missing; run the migration in SUPABASE_SETUP.md')
     partRes = await supabase.from('session_participants').select('session_id, user_id')
   }
-  if (partRes.error) { console.error('[db] getSessionParticipants', partRes.error); return [] }
+  if (partRes.error) { console.error('[db] getSessionParticipants', partRes.error); throw partRes.error }
 
   const participantMap: Record<string, string[]> = {}
   const lockedParticipantMap: Record<string, string[]> = {}
@@ -224,7 +225,7 @@ export async function dbGetBillItems(sessionId: string): Promise<BillItem[]> {
 export async function dbGetAllBillItems(): Promise<BillItem[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from('bill_items').select('*')
-  if (error) { console.error('[db] getAllBillItems', error); return [] }
+  if (error) { console.error('[db] getAllBillItems', error); throw error }
   return (data ?? []).map(rowToItem)
 }
 
@@ -249,7 +250,10 @@ export async function dbUpdateBillItem(itemId: string, data: Partial<BillItem>):
   if (data.quantity !== undefined) patch.quantity = data.quantity
   if (data.unitPrice !== undefined) patch.unit_price = data.unitPrice
   if (data.totalPrice !== undefined) patch.total_price = data.totalPrice
-  if (Object.keys(patch).length) await supabase.from('bill_items').update(patch).eq('id', itemId)
+  if (Object.keys(patch).length) {
+    const { error } = await supabase.from('bill_items').update(patch).eq('id', itemId)
+    if (error) { console.error('[db] updateBillItem', error); throw error }
+  }
 }
 
 export async function dbDeleteBillItem(itemId: string): Promise<void> {

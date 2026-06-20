@@ -299,6 +299,14 @@ export function SessionPage() {
                       const unitPrice = it.quantity > 1 ? totalPrice / it.quantity : totalPrice
                       updateBillItem(session.id, itemId, { totalPrice, unitPrice: Math.round(unitPrice * 100) / 100 })
                     }}
+                    onEditQuantity={(itemId, quantity) => {
+                      const item = items.find((candidate) => candidate.id === itemId)
+                      if (!item) return
+                      const totalPrice = Math.round(quantity * item.unitPrice * 100) / 100
+                      updateBillItem(session.id, itemId, { quantity, totalPrice }).catch(() => {
+                        toast.error('Quantity could not be saved')
+                      })
+                    }}
                   />
                 )
               })}

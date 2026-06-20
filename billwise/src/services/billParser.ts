@@ -24,29 +24,52 @@ export async function parseBillImage(
   onProgress?.({ status: 'Enhancing image…', progress: 0.05 })
   const processedUrl = await preprocessReceiptImage(dataUrl)
 
-  // Step 2 — Tesseract OCR on the cleaned image
+  // Step 2 — run complementary layouts. Receipts vary between dense tables,
+  // sparse thermal print and photographed pages, so one PSM is not reliable.
+  let ocrPass = 0
   const worker = await createWorker('eng', 1, {
     logger: (m) => {
       if (onProgress && m.progress != null) {
-        // Map 0–1 progress into 0.1–1.0 range (leave 0–0.1 for preprocessing)
-        onProgress({ status: m.status ?? 'Reading text…', progress: 0.1 + m.progress * 0.9 })
+        onProgress({
+          status: m.status ?? 'Reading text…',
+          progress: 0.1 + ocrPass * 0.45 + m.progress * 0.4,
+        })
       }
     },
   })
 
-  // Tesseract params tuned for receipts:
-  // PSM 6 = assume single uniform block of text (best for receipts)
-  // OEM 1 = LSTM neural net only
-  await worker.setParameters({
-    tessedit_pageseg_mode: '6' as never,
-    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/:-%@&\'() ',
-    preserve_interword_spaces: '1' as never,
-  })
+  try {
+    await worker.setParameters({
+      tessedit_pageseg_mode: '6' as never,
+      preserve_interword_spaces: '1' as never,
+      user_defined_dpi: '300',
+    })
+    const enhanced = await worker.recognize(processedUrl)
 
-  const { data } = await worker.recognize(processedUrl)
-  await worker.terminate()
+    onProgress?.({ status: 'Checking alternate bill layout…', progress: 0.55 })
+    ocrPass = 1
+    await worker.setParameters({ tessedit_pageseg_mode: '4' as never })
+    const original = await worker.recognize(dataUrl)
+    onProgress?.({ status: 'Finalising bill…', progress: 1 })
 
-  return extractBillFromText(data.text)
+    const candidates = [enhanced.data, original.data].map((data) => ({
+      bill: extractBillFromText(data.text),
+      confidence: data.confidence ?? 0,
+    }))
+    candidates.sort((a, b) => billCandidateScore(b.bill, b.confidence) - billCandidateScore(a.bill, a.confidence))
+    return candidates[0].bill
+  } finally {
+    await worker.terminate()
+  }
+}
+
+function billCandidateScore(bill: ParsedBill, confidence: number): number {
+  const itemTotal = bill.items.reduce((sum, item) => sum + item.totalPrice, 0)
+  const totalLooksValid = bill.totalAmount >= itemTotal && bill.totalAmount > 0
+  return bill.items.length * 30
+    + Math.min(confidence, 100)
+    + (bill.restaurantName ? 15 : 0)
+    + (totalLooksValid ? 30 : 0)
 }
 
 /** Parse raw OCR text into structured bill data */

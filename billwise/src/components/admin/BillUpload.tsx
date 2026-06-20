@@ -47,6 +47,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         const result = await parseBillImage(base64, mediaType, (p) => setOcrProgress(p))
         setParsed(result)
         setEditBill(result)
+        setEditMode(true)
         setState('done')
       } catch (err) {
         setErrorMsg((err as Error).message ?? 'OCR failed. Try a clearer image or enter manually.')
@@ -75,7 +76,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
       ...bill,
       items,
       subtotal: Math.round(subtotal * 100) / 100,
-      totalAmount: bill.totalAmount >= subtotal
+      totalAmount: bill.totalAmount > 0
         ? bill.totalAmount
         : Math.round((subtotal + bill.cgst + bill.sgst) * 100) / 100,
     }
@@ -125,7 +126,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
               : 'border-border hover:border-brand/40 hover:bg-brand/5',
           )}
         >
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+          <input ref={fileRef} type="file" accept="image/*,.heic,.heif" className="hidden" onChange={onFileChange} />
           <div className="flex flex-col items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-surface-3 border border-border flex items-center justify-center">
               <Image size={22} className="text-zinc-400" />
@@ -141,7 +142,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         <div className="flex items-center gap-2 px-3 py-2 bg-surface-1 border border-border rounded-xl">
           <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
           <p className="text-xs text-zinc-500">
-            Reads bills locally on your device — <span className="text-zinc-300">no internet or API key needed</span>
+            Reads bills locally on this device.
           </p>
         </div>
 
@@ -306,18 +307,30 @@ export function BillUpload({ onParsed }: BillUploadProps) {
                   <div className="flex gap-2">
                     <div className="flex items-center gap-1 flex-1">
                       <span className="text-xs text-zinc-500 shrink-0">Qty</span>
+                      <button
+                        type="button"
+                        onClick={() => updateItem(idx, 'quantity', Math.max(1, item.quantity - 1))}
+                        className="w-7 h-8 rounded-lg border border-border bg-surface-2 text-zinc-400 hover:text-white"
+                      >−</button>
                       <input
-                        type="number" min="1"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(idx, 'quantity', parseFloat(e.target.value) || 1)}
-                        className="w-full bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand/60"
+                        type="number" min="1" step="1" inputMode="numeric"
+                        value={item.quantity || ''}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onChange={(e) => updateItem(idx, 'quantity', Math.max(1, e.currentTarget.valueAsNumber || 1))}
+                        className="w-14 bg-surface-2 border border-border rounded-lg px-1 py-1.5 text-sm text-white text-center focus:outline-none focus:border-brand/60"
                       />
+                      <button
+                        type="button"
+                        onClick={() => updateItem(idx, 'quantity', item.quantity + 1)}
+                        className="w-7 h-8 rounded-lg border border-border bg-surface-2 text-zinc-400 hover:text-white"
+                      >+</button>
                     </div>
                     <div className="flex items-center gap-1 flex-1">
                       <span className="text-xs text-zinc-500 shrink-0">₹</span>
                       <input
                         type="number" min="0" step="0.01"
-                        value={item.unitPrice}
+                        value={item.unitPrice || ''}
+                        onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => updateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
                         className="w-full bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand/60"
                       />
@@ -364,7 +377,8 @@ export function BillUpload({ onParsed }: BillUploadProps) {
               <span className="text-sm text-zinc-400">CGST</span>
               <input
                 type="number" min="0" step="0.01"
-                value={editBill.cgst}
+                value={editBill.cgst || ''}
+                onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) => {
                   const cgst = parseFloat(e.target.value) || 0
                   setEditBill((b) => ({ ...b, cgst, totalAmount: b.subtotal + cgst + b.sgst }))
@@ -376,7 +390,8 @@ export function BillUpload({ onParsed }: BillUploadProps) {
               <span className="text-sm text-zinc-400">SGST</span>
               <input
                 type="number" min="0" step="0.01"
-                value={editBill.sgst}
+                value={editBill.sgst || ''}
+                onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) => {
                   const sgst = parseFloat(e.target.value) || 0
                   setEditBill((b) => ({ ...b, sgst, totalAmount: b.subtotal + b.cgst + sgst }))
@@ -401,9 +416,19 @@ export function BillUpload({ onParsed }: BillUploadProps) {
             )}
           </>
         )}
-        <div className="flex justify-between text-sm font-semibold pt-2 border-t border-border">
-          <span className="text-white">Total</span>
-          <span className="text-brand">{formatCurrency(bill?.totalAmount ?? 0)}</span>
+        <div className="flex items-center justify-between gap-3 text-sm font-semibold pt-2 border-t border-border">
+          <span className="text-white">Invoice total</span>
+          {editMode ? (
+            <input
+              type="number" min="0" step="0.01" inputMode="decimal"
+              value={editBill.totalAmount || ''}
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => setEditBill((b) => ({ ...b, totalAmount: e.currentTarget.valueAsNumber || 0 }))}
+              className="w-32 bg-surface-2 border border-border rounded-lg px-2 py-1 text-sm text-brand text-right focus:outline-none focus:border-brand/60"
+            />
+          ) : (
+            <span className="text-brand">{formatCurrency(bill?.totalAmount ?? 0)}</span>
+          )}
         </div>
       </div>
 

@@ -8,20 +8,25 @@ import { dbGetUsers, dbGetSessions, dbGetAllBillItems } from '../lib/db'
 import { useAppStore } from '../store/appStore'
 
 export function useSupabaseInit() {
-  const { hydrateFromSupabase, hydrateBillItemsFromSupabase } = useAppStore()
+  const { hydrateFromSupabase, hydrateBillItemsFromSupabase, setCloudSyncState } = useAppStore()
 
   useEffect(() => {
     if (!supabase) return
     const client = supabase
     let refreshVersion = 0
 
-    const refresh = () => {
+    const refresh = async () => {
       const version = ++refreshVersion
-      Promise.all([dbGetUsers(), dbGetSessions(), dbGetAllBillItems()]).then(([users, sessions, items]) => {
+      try {
+        const [users, sessions, items] = await Promise.all([dbGetUsers(), dbGetSessions(), dbGetAllBillItems()])
         if (version !== refreshVersion) return
         hydrateFromSupabase(users, sessions)
         hydrateBillItemsFromSupabase(items)
-      })
+      } catch (error) {
+        if (version !== refreshVersion) return
+        const message = error instanceof Error ? error.message : 'Could not connect to Supabase'
+        setCloudSyncState(true, message)
+      }
     }
 
     refresh()

@@ -34,11 +34,11 @@ create table public.users (
   created_at  timestamptz default now()
 );
 
--- Insert default admin (PIN = 1234, bcrypt hash)
--- You should regenerate this hash with bcrypt(12) for production
+-- Insert default admin (PIN = 1234, using the app's deterministic PIN hash)
 insert into public.users (name, pin_hash, role)
-values ('Admin', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewQ7dFkIj7n6YuJe', 'admin');
--- Note: above hash is for "1234" — replace with a proper bcrypt hash in production
+values ('Admin', 'wcoy4', 'admin');
+-- For a public production app, move PIN verification to a server-side function
+-- and replace this client-side hash with a slow password hash.
 
 -- ============================================================
 -- SESSIONS
@@ -50,6 +50,7 @@ create table public.sessions (
   date              date not null,
   bill_image_url    text,                           -- storage object URL
   status            text not null default 'active' check (status in ('active','locked','completed')),
+  is_public         boolean not null default true,
   subtotal          numeric(10,2) not null default 0,
   cgst              numeric(10,2) not null default 0,
   sgst              numeric(10,2) not null default 0,
@@ -57,6 +58,10 @@ create table public.sessions (
   created_by        uuid references public.users(id) on delete set null,
   created_at        timestamptz default now()
 );
+
+-- Existing projects: run this once if sessions were created before visibility controls.
+alter table public.sessions
+  add column if not exists is_public boolean not null default true;
 
 -- ============================================================
 -- BILL ITEMS
@@ -214,6 +219,12 @@ do $$
 begin
   if not exists (
     select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'users'
+  ) then
+    alter publication supabase_realtime add table public.users;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'sessions'
   ) then
     alter publication supabase_realtime add table public.sessions;
@@ -239,10 +250,10 @@ begin
 end $$;
 ```
 
-## Step 5: Wire the Supabase client into the store
+## Step 5: Verify the live connection
 
-Replace the Zustand persist store with Supabase calls in `src/store/appStore.ts`.
-The `src/lib/supabase.ts` client is already set up — just set the env vars.
+The Supabase client and store sync are already wired. Create a member in one browser
+and confirm it appears in another browser after the first live refresh.
 
 ## Key queries reference
 

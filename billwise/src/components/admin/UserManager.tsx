@@ -21,7 +21,7 @@ export function UserManager() {
 
   const handleAdd = async () => {
     if (!newName.trim()) { toast.error('Name is required'); return }
-    if (newPin.length < 4) { toast.error('PIN must be at least 4 digits'); return }
+    if (newPin.length !== 4) { toast.error('PIN must be 4 digits'); return }
     try {
       await addUser(newName.trim(), newPin, newRole)
       toast.success(`${newName} added`)
@@ -31,12 +31,16 @@ export function UserManager() {
     }
   }
 
-  const handlePinUpdate = () => {
+  const handlePinUpdate = async () => {
     if (!pinEditId) return
-    if (newPinValue.length < 4) { toast.error('PIN must be at least 4 digits'); return }
-    updateUserPin(pinEditId, newPinValue)
-    toast.success('PIN updated')
-    setPinEditId(null); setNewPinValue('')
+    if (newPinValue.length !== 4) { toast.error('PIN must be 4 digits'); return }
+    try {
+      await updateUserPin(pinEditId, newPinValue)
+      toast.success('PIN updated on every device')
+      setPinEditId(null); setNewPinValue('')
+    } catch {
+      toast.error('PIN could not be saved to the cloud')
+    }
   }
 
   const handleDelete = (id: string, name: string) => {
@@ -103,12 +107,12 @@ export function UserManager() {
             />
           </div>
           <div>
-            <label className="text-xs text-zinc-400 mb-1.5 block">PIN (4–6 digits)</label>
+            <label className="text-xs text-zinc-400 mb-1.5 block">PIN (4 digits)</label>
             <div className="relative">
               <input
                 type={showNewPin ? 'text' : 'password'}
                 value={newPin}
-                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="••••"
                 className="w-full bg-surface-1 border border-border rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-brand/60 font-mono tracking-widest"
               />
@@ -159,8 +163,8 @@ export function UserManager() {
             <input
               type={showNewPin ? 'text' : 'password'}
               value={newPinValue}
-              onChange={(e) => setNewPinValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="New PIN (4–6 digits)"
+              onChange={(e) => setNewPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="New 4-digit PIN"
               autoFocus
               className="w-full bg-surface-1 border border-border rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-brand/60 font-mono tracking-widest"
             />

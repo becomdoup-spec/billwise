@@ -12,8 +12,11 @@ export async function preprocessReceiptImage(dataUrl: string): Promise<string> {
     const img = new Image()
     img.onload = () => {
       try {
-        const MIN_HEIGHT = 2400
-        const scale = img.naturalHeight < MIN_HEIGHT ? MIN_HEIGHT / img.naturalHeight : 1
+        const MIN_HEIGHT = 2200
+        const MAX_DIMENSION = 3600
+        const upscale = img.naturalHeight < MIN_HEIGHT ? MIN_HEIGHT / img.naturalHeight : 1
+        const maxScale = MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight)
+        const scale = Math.min(upscale, maxScale)
         const w = Math.round(img.naturalWidth * scale)
         const h = Math.round(img.naturalHeight * scale)
 

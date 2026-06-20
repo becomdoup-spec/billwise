@@ -21,6 +21,7 @@ interface ItemCardProps {
   onPortionChange: (itemId: string, portion: number) => void
   onEditName?: (itemId: string, name: string) => void
   onEditPrice?: (itemId: string, price: number) => void
+  onEditQuantity?: (itemId: string, quantity: number) => void
 }
 
 const LONG_PRESS_MS = 600
@@ -51,6 +52,7 @@ export function ItemCard({
   onPortionChange,
   onEditName,
   onEditPrice,
+  onEditQuantity,
 }: ItemCardProps) {
   const [showSlider, setShowSlider] = useState(false)
   const [editingName, setEditingName] = useState(false)
@@ -187,11 +189,30 @@ export function ItemCard({
                   )}
                 </p>
               )}
-              <p className="text-xs text-zinc-600 mt-0.5">
-                {item.quantity > 1
-                  ? `${item.quantity} × ${formatCurrency(item.unitPrice)}`
-                  : formatCurrency(item.unitPrice)}
-              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <p className="text-xs text-zinc-600">
+                  {item.quantity > 1
+                    ? `${item.quantity} × ${formatCurrency(item.unitPrice)}`
+                    : formatCurrency(item.unitPrice)}
+                </p>
+                {isAdmin && !isLocked && onEditQuantity && (
+                  <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => onEditQuantity(item.id, Math.max(1, item.quantity - 1))}
+                      className="w-5 h-5 rounded border border-border text-[11px] text-zinc-500 hover:text-white"
+                      aria-label={`Decrease ${item.name} quantity`}
+                    >−</button>
+                    <span className="text-[10px] text-zinc-500">Qty {item.quantity}</span>
+                    <button
+                      type="button"
+                      onClick={() => onEditQuantity(item.id, item.quantity + 1)}
+                      className="w-5 h-5 rounded border border-border text-[11px] text-zinc-500 hover:text-white"
+                      aria-label={`Increase ${item.name} quantity`}
+                    >+</button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="text-right shrink-0">

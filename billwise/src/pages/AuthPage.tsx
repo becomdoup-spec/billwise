@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ReceiptText, UserRound } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Loader2, ReceiptText, UserRound } from 'lucide-react'
 import { PinPad } from '../components/auth/PinPad'
 import { useAppStore } from '../store/appStore'
 import { hashPin } from '../services/calculations'
@@ -20,7 +20,7 @@ const avatarStyles = [
 
 export function AuthPage() {
   const navigate = useNavigate()
-  const { users, setCurrentUser } = useAppStore()
+  const { users, setCurrentUser, cloudReady, cloudSyncError } = useAppStore()
   const [step, setStep] = useState<Step>('profiles')
   const [role, setRole] = useState<Role>('user')
   const [selectedUserId, setSelectedUserId] = useState('')
@@ -31,6 +31,7 @@ export function AuthPage() {
   const selectedUser = users.find((u) => u.id === selectedUserId)
 
   const openAdminAccess = () => {
+    if (!cloudReady || cloudSyncError) return
     setRole('admin')
     setSelectedUserId(adminUsers[0]?.id ?? '')
     setError('')
@@ -92,7 +93,17 @@ export function AuthPage() {
             <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight text-white">Who&apos;s in the mix?</h1>
             <p className="text-sm sm:text-base text-zinc-500 mt-3">Claim yours &amp; Join the tally</p>
 
-            {regularUsers.length > 0 ? (
+            {!cloudReady ? (
+              <div className="mt-12 flex items-center justify-center gap-2 text-sm text-zinc-500">
+                <Loader2 size={16} className="animate-spin text-brand" /> Loading live profiles…
+              </div>
+            ) : cloudSyncError ? (
+              <div className="mt-12 mx-auto max-w-sm rounded-2xl border border-red-500/20 bg-red-500/5 px-6 py-6">
+                <AlertCircle size={22} className="text-red-400 mx-auto mb-3" />
+                <p className="text-sm text-red-300">Live profiles could not be loaded</p>
+                <p className="text-xs text-zinc-500 mt-1">Check this deployment's Supabase environment variables and connection.</p>
+              </div>
+            ) : regularUsers.length > 0 ? (
               <div className="mt-10 sm:mt-14 flex flex-wrap justify-center gap-x-5 gap-y-8 sm:gap-x-8">
                 {regularUsers.map((user, index) => (
                   <button
