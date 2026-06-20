@@ -101,7 +101,13 @@ export function AuthPage() {
               <div className="mt-12 mx-auto max-w-sm rounded-2xl border border-red-500/20 bg-red-500/5 px-6 py-6">
                 <AlertCircle size={22} className="text-red-400 mx-auto mb-3" />
                 <p className="text-sm text-red-300">Live profiles could not be loaded</p>
-                <p className="text-xs text-zinc-500 mt-1">Check this deployment's Supabase environment variables and connection.</p>
+                <p className="text-xs text-zinc-500 mt-1">{cloudSyncError}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-4 text-xs text-brand hover:text-brand-light"
+                >
+                  Retry connection
+                </button>
               </div>
             ) : regularUsers.length > 0 ? (
               <div className="mt-10 sm:mt-14 flex flex-wrap justify-center gap-x-5 gap-y-8 sm:gap-x-8">

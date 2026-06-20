@@ -26,7 +26,11 @@ export function useSupabaseInit() {
         hydrateBillItemsFromSupabase(items)
       } catch (error) {
         if (version !== refreshVersion) return
-        const message = error instanceof Error ? error.message : 'Could not connect to Supabase'
+        const message = error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error && 'message' in error
+            ? String(error.message)
+            : 'Could not connect to Supabase'
         setCloudSyncState(true, message)
       }
     }
