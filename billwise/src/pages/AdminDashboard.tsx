@@ -25,8 +25,12 @@ export function AdminDashboard() {
   const active = sessions.filter((s) => s.status !== 'completed')
   const completed = sessions.filter((s) => s.status === 'completed')
 
-  const togglePublic = (session: Session) => {
-    updateSession(session.id, { isPublic: !session.isPublic })
+  const togglePublic = async (session: Session) => {
+    try {
+      await updateSession(session.id, { isPublic: !session.isPublic })
+    } catch {
+      toast.error('Session visibility could not be saved')
+    }
   }
 
   return (
@@ -179,11 +183,15 @@ export function AdminDashboard() {
             Cancel
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               if (!sessionToDelete) return
-              deleteSession(sessionToDelete.id)
-              toast.info('Session deleted')
-              setSessionToDelete(null)
+              try {
+                await deleteSession(sessionToDelete.id)
+                toast.info('Session deleted')
+                setSessionToDelete(null)
+              } catch {
+                toast.error('Session could not be deleted from the database')
+              }
             }}
             className="flex-1 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/25 transition-colors"
           >

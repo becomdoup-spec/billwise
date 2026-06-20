@@ -11,6 +11,8 @@ export function useSupabaseInit() {
   const { hydrateFromSupabase, hydrateBillItemsFromSupabase, setCloudSyncState } = useAppStore()
 
   useEffect(() => {
+    // Remove data persisted by older builds. Supabase is the source of truth.
+    window.localStorage.removeItem('billwise-store')
     if (!supabase) return
     const client = supabase
     let refreshVersion = 0

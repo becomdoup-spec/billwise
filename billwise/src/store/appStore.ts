@@ -1,11 +1,10 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { User, Session, BillItem, ItemSelection } from '../types'
 import { generateId, hashPin } from '../services/calculations'
 import {
   dbFindUserByPin, dbCreateUser, dbUpdateUserPin, dbDeleteUser,
   dbCreateSession, dbUpdateSession, dbDeleteSession, dbUploadBillImage, dbAddParticipant, dbRemoveParticipant,
-  dbSetBillItems, dbUpdateBillItem, dbDeleteBillItem,
+  dbSetBillItems, dbCreateBillItem, dbUpdateBillItem, dbDeleteBillItem,
   dbUpsertSelection, dbDeleteSelection, dbLockUserSelections, dbUnlockUserSelections,
 } from '../lib/db'
 import { supabase } from '../lib/supabase'
@@ -31,29 +30,29 @@ interface AppStore {
   // User management
   addUser: (name: string, pin: string, role: 'admin' | 'user') => Promise<User>
   updateUserPin: (userId: string, newPin: string) => Promise<void>
-  deleteUser: (userId: string) => void
+  deleteUser: (userId: string) => Promise<void>
 
   // Session management
   createSession: (data: Omit<Session, 'id' | 'orderId' | 'createdAt' | 'participantIds' | 'lockedParticipantIds' | 'status'>) => Promise<Session>
-  updateSession: (id: string, data: Partial<Session>) => void
-  deleteSession: (id: string) => void
+  updateSession: (id: string, data: Partial<Session>) => Promise<void>
+  deleteSession: (id: string) => Promise<void>
   saveBillImage: (sessionId: string, imageDataUrl: string) => Promise<boolean>
   addParticipant: (sessionId: string, userId: string) => Promise<void>
-  removeParticipant: (sessionId: string, userId: string) => void
-  lockSession: (sessionId: string) => void
+  removeParticipant: (sessionId: string, userId: string) => Promise<void>
+  lockSession: (sessionId: string) => Promise<void>
 
   // Bill items
   setBillItems: (sessionId: string, items: BillItem[]) => Promise<void>
   setBillItemsForSession: (sessionId: string, items: BillItem[]) => void
-  addBillItem: (sessionId: string, item: Omit<BillItem, 'id' | 'sessionId'>) => BillItem
+  addBillItem: (sessionId: string, item: Omit<BillItem, 'id' | 'sessionId'>) => Promise<BillItem>
   updateBillItem: (sessionId: string, itemId: string, data: Partial<BillItem>) => Promise<void>
-  removeBillItem: (sessionId: string, itemId: string) => void
+  removeBillItem: (sessionId: string, itemId: string) => Promise<void>
 
   // Selections
-  setSelection: (sessionId: string, userId: string, itemId: string, portion: number) => void
-  removeSelection: (sessionId: string, userId: string, itemId: string) => void
-  lockUserSelections: (sessionId: string, userId: string) => void
-  unlockUserSelections: (sessionId: string, userId: string) => void
+  setSelection: (sessionId: string, userId: string, itemId: string, portion: number) => Promise<void>
+  removeSelection: (sessionId: string, userId: string, itemId: string) => Promise<void>
+  lockUserSelections: (sessionId: string, userId: string) => Promise<void>
+  unlockUserSelections: (sessionId: string, userId: string) => Promise<void>
   getSelections: (sessionId: string) => ItemSelection[]
   getUserSelections: (sessionId: string, userId: string) => ItemSelection[]
 
@@ -69,20 +68,20 @@ interface AppStore {
   setParticipantLockFromRealtime: (sessionId: string, userId: string, locked: boolean) => void
 }
 
-const SEED_USERS: User[] = [
-  { id: 'admin-1', name: 'Admin', pin: hashPin('1234'), role: 'admin', createdAt: new Date().toISOString() },
-]
+function requireCloudConnection() {
+  if (!supabase) {
+    throw new Error('Supabase is not configured for this deployment')
+  }
+}
 
-export const useAppStore = create<AppStore>()(
-  persist(
-    (set, get) => ({
-      users: SEED_USERS,
+export const useAppStore = create<AppStore>((set, get) => ({
+      users: [],
       sessions: [],
       billItems: {},
       selections: [],
       apiKey: '',
       cloudReady: !supabase,
-      cloudSyncError: '',
+      cloudSyncError: supabase ? '' : 'Supabase is not configured for this deployment',
       currentUser: null,
 
       setCurrentUser: (user) => set({ currentUser: user }),
@@ -112,6 +111,7 @@ export const useAppStore = create<AppStore>()(
       setApiKey: (key) => set({ apiKey: key }),
 
       addUser: async (name, pin, role) => {
+        requireCloudConnection()
         const user: User = {
           id: generateId(),
           name,
@@ -125,6 +125,7 @@ export const useAppStore = create<AppStore>()(
       },
 
       updateUserPin: async (userId, newPin) => {
+        requireCloudConnection()
         const hashed = hashPin(newPin)
         await dbUpdateUserPin(userId, hashed)
         set((s) => ({
@@ -133,7 +134,9 @@ export const useAppStore = create<AppStore>()(
         }))
       },
 
-      deleteUser: (userId) => {
+      deleteUser: async (userId) => {
+        requireCloudConnection()
+        await dbDeleteUser(userId)
         set((s) => ({
           users: s.users.filter((u) => u.id !== userId),
           sessions: s.sessions.map((sess) => ({
@@ -143,10 +146,10 @@ export const useAppStore = create<AppStore>()(
           })),
           selections: s.selections.filter((sel) => sel.userId !== userId),
         }))
-        dbDeleteUser(userId)
       },
 
       createSession: async (data) => {
+        requireCloudConnection()
         const session: Session = {
           ...data,
           id: generateId(),
@@ -164,14 +167,17 @@ export const useAppStore = create<AppStore>()(
         return session
       },
 
-      updateSession: (id, data) => {
+      updateSession: async (id, data) => {
+        requireCloudConnection()
+        await dbUpdateSession(id, data)
         set((s) => ({
           sessions: s.sessions.map((sess) => sess.id === id ? { ...sess, ...data } : sess),
         }))
-        dbUpdateSession(id, data)
       },
 
-      deleteSession: (id) => {
+      deleteSession: async (id) => {
+        requireCloudConnection()
+        await dbDeleteSession(id)
         set((s) => {
           const billItems = { ...s.billItems }
           delete billItems[id]
@@ -181,10 +187,10 @@ export const useAppStore = create<AppStore>()(
             selections: s.selections.filter((sel) => sel.sessionId !== id),
           }
         })
-        dbDeleteSession(id)
       },
 
       saveBillImage: async (sessionId, imageDataUrl) => {
+        requireCloudConnection()
         const path = await dbUploadBillImage(sessionId, imageDataUrl)
         const storedImage = path ?? imageDataUrl
         set((s) => ({
@@ -197,6 +203,7 @@ export const useAppStore = create<AppStore>()(
       },
 
       addParticipant: async (sessionId, userId) => {
+        requireCloudConnection()
         await dbAddParticipant(sessionId, userId)
         set((s) => ({
           sessions: s.sessions.map((sess) =>
@@ -207,7 +214,9 @@ export const useAppStore = create<AppStore>()(
         }))
       },
 
-      removeParticipant: (sessionId, userId) => {
+      removeParticipant: async (sessionId, userId) => {
+        requireCloudConnection()
+        await dbRemoveParticipant(sessionId, userId)
         set((s) => ({
           sessions: s.sessions.map((sess) =>
             sess.id === sessionId
@@ -222,19 +231,20 @@ export const useAppStore = create<AppStore>()(
             (sel) => !(sel.sessionId === sessionId && sel.userId === userId),
           ),
         }))
-        dbRemoveParticipant(sessionId, userId)
       },
 
-      lockSession: (sessionId) => {
+      lockSession: async (sessionId) => {
+        requireCloudConnection()
+        await dbUpdateSession(sessionId, { status: 'locked' })
         set((s) => ({
           sessions: s.sessions.map((sess) =>
             sess.id === sessionId ? { ...sess, status: 'locked' } : sess,
           ),
         }))
-        dbUpdateSession(sessionId, { status: 'locked' })
       },
 
       setBillItems: async (sessionId, items) => {
+        requireCloudConnection()
         await dbSetBillItems(sessionId, items)
         set((s) => ({ billItems: { ...s.billItems, [sessionId]: items } }))
       },
@@ -243,8 +253,10 @@ export const useAppStore = create<AppStore>()(
         set((s) => ({ billItems: { ...s.billItems, [sessionId]: items } }))
       },
 
-      addBillItem: (sessionId, item) => {
+      addBillItem: async (sessionId, item) => {
+        requireCloudConnection()
         const newItem: BillItem = { ...item, id: generateId(), sessionId }
+        await dbCreateBillItem(newItem)
         set((s) => ({
           billItems: {
             ...s.billItems,
@@ -266,7 +278,9 @@ export const useAppStore = create<AppStore>()(
         }))
       },
 
-      removeBillItem: (sessionId, itemId) => {
+      removeBillItem: async (sessionId, itemId) => {
+        requireCloudConnection()
+        await dbDeleteBillItem(itemId)
         set((s) => ({
           billItems: {
             ...s.billItems,
@@ -276,52 +290,55 @@ export const useAppStore = create<AppStore>()(
             (sel) => !(sel.sessionId === sessionId && sel.itemId === itemId),
           ),
         }))
-        dbDeleteBillItem(itemId)
       },
 
-      setSelection: (sessionId, userId, itemId, portion) => {
-        let sel: ItemSelection | undefined
-        set((s) => {
-          const participantLocked = s.sessions.some((session) =>
-            session.id === sessionId && (session.lockedParticipantIds ?? []).includes(userId),
-          )
-          const existing = s.selections.find(
-            (x) => x.sessionId === sessionId && x.userId === userId && x.itemId === itemId,
-          )
-          if (existing) {
-            sel = {
+      setSelection: async (sessionId, userId, itemId, portion) => {
+        requireCloudConnection()
+        const state = get()
+        const participantLocked = state.sessions.some((session) =>
+          session.id === sessionId && (session.lockedParticipantIds ?? []).includes(userId),
+        )
+        const existing = state.selections.find(
+          (selection) => selection.sessionId === sessionId
+            && selection.userId === userId
+            && selection.itemId === itemId,
+        )
+        const sel: ItemSelection = existing
+          ? {
               ...existing,
               portionPercentage: portion,
               lockedAt: participantLocked ? existing.lockedAt ?? new Date().toISOString() : undefined,
             }
-            return {
-              selections: s.selections.map((x) => x === existing ? sel! : x),
+          : {
+              id: generateId(),
+              sessionId,
+              userId,
+              itemId,
+              portionPercentage: portion,
+              lockedAt: participantLocked ? new Date().toISOString() : undefined,
             }
-          }
-          sel = {
-            id: generateId(),
-            sessionId,
-            userId,
-            itemId,
-            portionPercentage: portion,
-            lockedAt: participantLocked ? new Date().toISOString() : undefined,
-          }
-          return { selections: [...s.selections, sel] }
-        })
-        if (sel) dbUpsertSelection(sel)
+        await dbUpsertSelection(sel)
+        set((s) => ({
+          selections: existing
+            ? s.selections.map((selection) => selection.id === existing.id ? sel : selection)
+            : [...s.selections, sel],
+        }))
       },
 
-      removeSelection: (sessionId, userId, itemId) => {
+      removeSelection: async (sessionId, userId, itemId) => {
+        requireCloudConnection()
+        await dbDeleteSelection(sessionId, userId, itemId)
         set((s) => ({
           selections: s.selections.filter(
             (sel) => !(sel.sessionId === sessionId && sel.userId === userId && sel.itemId === itemId),
           ),
         }))
-        dbDeleteSelection(sessionId, userId, itemId)
       },
 
-      lockUserSelections: (sessionId, userId) => {
+      lockUserSelections: async (sessionId, userId) => {
+        requireCloudConnection()
         const now = new Date().toISOString()
+        await dbLockUserSelections(sessionId, userId, now)
         set((s) => ({
           sessions: s.sessions.map((sess) =>
             sess.id === sessionId && !(sess.lockedParticipantIds ?? []).includes(userId)
@@ -334,10 +351,11 @@ export const useAppStore = create<AppStore>()(
               : sel,
           ),
         }))
-        dbLockUserSelections(sessionId, userId, now)
       },
 
-      unlockUserSelections: (sessionId, userId) => {
+      unlockUserSelections: async (sessionId, userId) => {
+        requireCloudConnection()
+        await dbUnlockUserSelections(sessionId, userId)
         set((s) => ({
           sessions: s.sessions.map((sess) =>
             sess.id === sessionId
@@ -353,7 +371,6 @@ export const useAppStore = create<AppStore>()(
               : sel,
           ),
         }))
-        dbUnlockUserSelections(sessionId, userId)
       },
 
       getSelections: (sessionId) => get().selections.filter((s) => s.sessionId === sessionId),
@@ -365,7 +382,7 @@ export const useAppStore = create<AppStore>()(
       hydrateFromSupabase: (users, sessions) => {
         set((s) => {
           // Supabase is the source of truth whenever it is configured.
-          const mergedUsers = users.length ? users : SEED_USERS
+          const mergedUsers = users
           const mergedSessions = sessions
 
           // Re-validate currentUser against fresh users list
@@ -456,16 +473,4 @@ export const useAppStore = create<AppStore>()(
           }),
         }))
       },
-    }),
-    {
-      name: 'billwise-store',
-      partialize: (state) => ({
-        users: state.users,
-        sessions: state.sessions,
-        billItems: state.billItems,
-        selections: state.selections,
-        apiKey: state.apiKey,
-      }),
-    },
-  ),
-)
+}))

@@ -197,11 +197,15 @@ export function UserManager() {
             Cancel
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               if (!userToDelete) return
-              deleteUser(userToDelete.id)
-              toast.info(`${userToDelete.name} removed`)
-              setUserToDelete(null)
+              try {
+                await deleteUser(userToDelete.id)
+                toast.info(`${userToDelete.name} removed`)
+                setUserToDelete(null)
+              } catch {
+                toast.error('Member could not be removed from the database')
+              }
             }}
             className="flex-1 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/25 transition-colors"
           >

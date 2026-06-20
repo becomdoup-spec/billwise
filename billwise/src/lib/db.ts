@@ -95,7 +95,8 @@ export async function dbUpdateUserPin(userId: string, pinHash: string): Promise<
 
 export async function dbDeleteUser(userId: string): Promise<void> {
   if (!supabase) return
-  await supabase.from('users').delete().eq('id', userId)
+  const { error } = await supabase.from('users').delete().eq('id', userId)
+  if (error) { console.error('[db] deleteUser', error); throw error }
 }
 
 // ── Sessions ──────────────────────────────────────────────────────
@@ -167,7 +168,7 @@ export async function dbUpdateSession(id: string, data: Partial<Session>): Promi
   if (data.billImageUrl !== undefined) patch.bill_image_url = data.billImageUrl
   if (Object.keys(patch).length) {
     const { error } = await supabase.from('sessions').update(patch).eq('id', id)
-    if (error) console.error('[db] updateSession', error)
+    if (error) { console.error('[db] updateSession', error); throw error }
   }
 }
 
@@ -199,7 +200,7 @@ export async function dbGetBillImageUrl(path: string): Promise<string | null> {
 export async function dbDeleteSession(id: string): Promise<void> {
   if (!supabase) return
   const { error } = await supabase.from('sessions').delete().eq('id', id)
-  if (error) console.error('[db] deleteSession', error)
+  if (error) { console.error('[db] deleteSession', error); throw error }
 }
 
 export async function dbAddParticipant(sessionId: string, userId: string): Promise<void> {
@@ -210,7 +211,8 @@ export async function dbAddParticipant(sessionId: string, userId: string): Promi
 
 export async function dbRemoveParticipant(sessionId: string, userId: string): Promise<void> {
   if (!supabase) return
-  await supabase.from('session_participants').delete().eq('session_id', sessionId).eq('user_id', userId)
+  const { error } = await supabase.from('session_participants').delete().eq('session_id', sessionId).eq('user_id', userId)
+  if (error) { console.error('[db] removeParticipant', error); throw error }
 }
 
 // ── Bill Items ────────────────────────────────────────────────────
@@ -243,6 +245,20 @@ export async function dbSetBillItems(sessionId: string, items: BillItem[]): Prom
   }
 }
 
+export async function dbCreateBillItem(item: BillItem): Promise<void> {
+  if (!supabase) return
+  const { error } = await supabase.from('bill_items').insert({
+    id: item.id,
+    session_id: item.sessionId,
+    name: item.name,
+    quantity: item.quantity,
+    unit_price: item.unitPrice,
+    total_price: item.totalPrice,
+    category: item.category,
+  })
+  if (error) { console.error('[db] createBillItem', error); throw error }
+}
+
 export async function dbUpdateBillItem(itemId: string, data: Partial<BillItem>): Promise<void> {
   if (!supabase) return
   const patch: Record<string, unknown> = {}
@@ -258,7 +274,8 @@ export async function dbUpdateBillItem(itemId: string, data: Partial<BillItem>):
 
 export async function dbDeleteBillItem(itemId: string): Promise<void> {
   if (!supabase) return
-  await supabase.from('bill_items').delete().eq('id', itemId)
+  const { error } = await supabase.from('bill_items').delete().eq('id', itemId)
+  if (error) { console.error('[db] deleteBillItem', error); throw error }
 }
 
 // ── Selections ────────────────────────────────────────────────────
@@ -272,7 +289,7 @@ export async function dbGetSelections(sessionId: string): Promise<ItemSelection[
 
 export async function dbUpsertSelection(sel: ItemSelection): Promise<void> {
   if (!supabase) return
-  await supabase.from('item_selections').upsert({
+  const { error } = await supabase.from('item_selections').upsert({
     id: sel.id,
     session_id: sel.sessionId,
     user_id: sel.userId,
@@ -280,15 +297,17 @@ export async function dbUpsertSelection(sel: ItemSelection): Promise<void> {
     portion_percentage: sel.portionPercentage,
     locked_at: sel.lockedAt ?? null,
   })
+  if (error) { console.error('[db] upsertSelection', error); throw error }
 }
 
 export async function dbDeleteSelection(sessionId: string, userId: string, itemId: string): Promise<void> {
   if (!supabase) return
-  await supabase.from('item_selections')
+  const { error } = await supabase.from('item_selections')
     .delete()
     .eq('session_id', sessionId)
     .eq('user_id', userId)
     .eq('item_id', itemId)
+  if (error) { console.error('[db] deleteSelection', error); throw error }
 }
 
 export async function dbLockUserSelections(sessionId: string, userId: string, lockedAt: string): Promise<void> {
@@ -303,8 +322,8 @@ export async function dbLockUserSelections(sessionId: string, userId: string, lo
       .eq('session_id', sessionId)
       .eq('user_id', userId),
   ])
-  if (participantRes.error) console.error('[db] lockParticipant', participantRes.error)
-  if (selectionRes.error) console.error('[db] lockUserSelections', selectionRes.error)
+  if (participantRes.error) { console.error('[db] lockParticipant', participantRes.error); throw participantRes.error }
+  if (selectionRes.error) { console.error('[db] lockUserSelections', selectionRes.error); throw selectionRes.error }
 }
 
 export async function dbUnlockUserSelections(sessionId: string, userId: string): Promise<void> {
@@ -319,8 +338,8 @@ export async function dbUnlockUserSelections(sessionId: string, userId: string):
       .eq('session_id', sessionId)
       .eq('user_id', userId),
   ])
-  if (participantRes.error) console.error('[db] unlockParticipant', participantRes.error)
-  if (selectionRes.error) console.error('[db] unlockUserSelections', selectionRes.error)
+  if (participantRes.error) { console.error('[db] unlockParticipant', participantRes.error); throw participantRes.error }
+  if (selectionRes.error) { console.error('[db] unlockUserSelections', selectionRes.error); throw selectionRes.error }
 }
 
 // Re-export rowToSelection for use in realtime subscription

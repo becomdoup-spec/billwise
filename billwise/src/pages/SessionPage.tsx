@@ -112,29 +112,49 @@ export function SessionPage() {
     else toast.error('The original bill image is unavailable')
   }
 
-  const handleSelect = (itemId: string) => {
+  const handleSelect = async (itemId: string) => {
     if (!selectionUserId || (!isAdmin && isSessionLocked)) return
-    setSelection(session.id, selectionUserId, itemId, 100)
+    try {
+      await setSelection(session.id, selectionUserId, itemId, 100)
+    } catch {
+      toast.error('Selection could not be saved')
+    }
   }
 
-  const handleDeselect = (itemId: string) => {
+  const handleDeselect = async (itemId: string) => {
     if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked))) return
-    removeSelection(session.id, selectionUserId, itemId)
+    try {
+      await removeSelection(session.id, selectionUserId, itemId)
+    } catch {
+      toast.error('Selection could not be removed')
+    }
   }
 
-  const handlePortion = (itemId: string, portion: number) => {
+  const handlePortion = async (itemId: string, portion: number) => {
     if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked))) return
-    setSelection(session.id, selectionUserId, itemId, portion)
+    try {
+      await setSelection(session.id, selectionUserId, itemId, portion)
+    } catch {
+      toast.error('Portion could not be saved')
+    }
   }
 
-  const handleLockMine = () => {
-    lockUserSelections(session.id, viewingUserId)
-    toast.success('Your selections are locked!')
+  const handleLockMine = async () => {
+    try {
+      await lockUserSelections(session.id, viewingUserId)
+      toast.success('Your selections are locked!')
+    } catch {
+      toast.error('Selections could not be locked')
+    }
   }
 
-  const handleUnlockMine = () => {
-    unlockUserSelections(session.id, viewingUserId)
-    toast.info('Selections unlocked — you can edit again')
+  const handleUnlockMine = async () => {
+    try {
+      await unlockUserSelections(session.id, viewingUserId)
+      toast.info('Selections unlocked — you can edit again')
+    } catch {
+      toast.error('Selections could not be unlocked')
+    }
   }
 
   const lockedCount = participants.filter((p) =>
@@ -292,12 +312,21 @@ export function SessionPage() {
                     onSelect={handleSelect}
                     onDeselect={handleDeselect}
                     onPortionChange={handlePortion}
-                    onEditName={(itemId, name) => updateBillItem(session.id, itemId, { name })}
+                    onEditName={(itemId, name) => {
+                      updateBillItem(session.id, itemId, { name }).catch(() => {
+                        toast.error('Item name could not be saved')
+                      })
+                    }}
                     onEditPrice={(itemId, totalPrice) => {
                       const it = items.find((i) => i.id === itemId)
                       if (!it) return
                       const unitPrice = it.quantity > 1 ? totalPrice / it.quantity : totalPrice
-                      updateBillItem(session.id, itemId, { totalPrice, unitPrice: Math.round(unitPrice * 100) / 100 })
+                      updateBillItem(session.id, itemId, {
+                        totalPrice,
+                        unitPrice: Math.round(unitPrice * 100) / 100,
+                      }).catch(() => {
+                        toast.error('Item price could not be saved')
+                      })
                     }}
                     onEditQuantity={(itemId, quantity) => {
                       const item = items.find((candidate) => candidate.id === itemId)
@@ -501,13 +530,17 @@ export function SessionPage() {
                     )}
                     {isAdmin && (
                       <button
-                        onClick={() => {
-                          if (isUserLocked) {
-                            unlockUserSelections(session.id, user.id)
-                            toast.info(`${user.name} unlocked`)
-                          } else {
-                            lockUserSelections(session.id, user.id)
-                            toast.success(`${user.name} locked`)
+                        onClick={async () => {
+                          try {
+                            if (isUserLocked) {
+                              await unlockUserSelections(session.id, user.id)
+                              toast.info(`${user.name} unlocked`)
+                            } else {
+                              await lockUserSelections(session.id, user.id)
+                              toast.success(`${user.name} locked`)
+                            }
+                          } catch {
+                            toast.error(`${user.name}'s status could not be saved`)
                           }
                         }}
                         className={clsx(
@@ -523,9 +556,13 @@ export function SessionPage() {
                   </div>
                   {isAdmin && (
                     <button
-                      onClick={() => {
-                        removeParticipant(session.id, user.id)
-                        toast.info(`${user.name} removed`)
+                      onClick={async () => {
+                        try {
+                          await removeParticipant(session.id, user.id)
+                          toast.info(`${user.name} removed`)
+                        } catch {
+                          toast.error(`${user.name} could not be removed`)
+                        }
                       }}
                       className="p-1.5 text-zinc-600 hover:text-red-400 transition-colors"
                     >
@@ -542,7 +579,14 @@ export function SessionPage() {
                 {nonParticipants.map((user) => (
                   <button
                     key={user.id}
-                    onClick={() => { addParticipant(session.id, user.id); toast.success(`${user.name} added`) }}
+                    onClick={async () => {
+                      try {
+                        await addParticipant(session.id, user.id)
+                        toast.success(`${user.name} added`)
+                      } catch {
+                        toast.error(`${user.name} could not be added`)
+                      }
+                    }}
                     className="w-full flex items-center gap-3 bg-surface-1 border border-border border-dashed hover:border-brand/30 rounded-xl px-4 py-3 mb-2 transition-all"
                   >
                     <div className="w-8 h-8 rounded-lg bg-surface-3 flex items-center justify-center text-xs font-bold text-zinc-500">
