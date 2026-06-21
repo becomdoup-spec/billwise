@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState } from 'react'
-import { Check, Sliders, Lock } from 'lucide-react'
+import { Check, Sliders, Lock, CircleCheck, Clock3, TriangleAlert } from 'lucide-react'
 import type { BillItem, ItemSelection, User } from '../../types'
-import { formatCurrency } from '../../services/calculations'
+import { formatCurrency, getAllocatedPortion } from '../../services/calculations'
 import { Modal } from '../shared/Modal'
 import { PortionSlider } from './PortionSlider'
 import clsx from 'clsx'
@@ -69,6 +69,12 @@ export function ItemCard({
   const portion = selection?.portionPercentage ?? 100
   const isSplit = portion < 100
   const myAmount = isSelected ? item.totalPrice * (portion / 100) : 0
+  const allocatedPortion = getAllocatedPortion(itemSelections)
+  const allocationComplete = allocatedPortion >= 99.99 && allocatedPortion <= 100.01
+  const allocationOver = allocatedPortion > 100.01
+  const displayAllocated = allocationComplete ? 100 : allocatedPortion
+  const pendingPortion = Math.max(0, Math.round((100 - allocatedPortion) * 100) / 100)
+  const progressWidth = Math.min(100, Math.max(0, allocatedPortion))
 
   const otherSelections = itemSelections.filter((s) => s.userId !== currentUserId)
 
@@ -141,10 +147,16 @@ export function ItemCard({
         onPointerLeave={cancelLongPress}
         onClick={handleClick}
         className={clsx(
-          'relative flex items-start gap-3 px-4 py-3.5 select-none transition-all duration-150',
+          'relative flex items-start gap-3 px-4 py-3.5 select-none overflow-hidden transition-all duration-500',
           showSelectionControl ? 'cursor-pointer' : 'cursor-default',
           'active:bg-surface-3/40',
-          isSelected ? 'bg-brand/5' : 'bg-transparent',
+          allocationComplete
+            ? 'bg-gradient-to-r from-emerald-500/[0.13] via-emerald-500/[0.04] to-transparent anim-allocation-complete'
+            : allocationOver
+              ? 'bg-gradient-to-r from-red-500/[0.12] to-transparent'
+              : allocatedPortion > 0
+                ? 'bg-gradient-to-r from-amber-500/[0.08] to-transparent'
+                : isSelected ? 'bg-brand/5' : 'bg-transparent',
           selectionLocked && !isAdmin && 'opacity-75',
           animClass,
         )}
@@ -245,6 +257,45 @@ export function ItemCard({
                   {portion}% of {formatCurrency(item.totalPrice)}
                 </p>
               )}
+            </div>
+          </div>
+
+          {/* Item allocation status */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-[10px] font-medium">
+              <span className={clsx(
+                'flex items-center gap-1',
+                allocationComplete
+                  ? 'text-emerald-400'
+                  : allocationOver
+                    ? 'text-red-400'
+                    : allocatedPortion > 0 ? 'text-amber-400' : 'text-zinc-600',
+              )}>
+                {allocationComplete
+                  ? <CircleCheck size={11} />
+                  : allocationOver
+                    ? <TriangleAlert size={11} />
+                    : <Clock3 size={11} />}
+                {allocationComplete
+                  ? '100% allocated · Complete'
+                  : allocationOver
+                    ? `${displayAllocated}% allocated · ${Math.round((allocatedPortion - 100) * 100) / 100}% over`
+                    : `${displayAllocated}% allocated · ${pendingPortion}% pending`}
+              </span>
+              {!allocationComplete && !allocationOver && allocatedPortion > 0 && (
+                <span className="text-zinc-600">{formatCurrency(item.totalPrice * pendingPortion / 100)} left</span>
+              )}
+            </div>
+            <div className="h-1 rounded-full bg-surface-3/80 overflow-hidden">
+              <div
+                className={clsx(
+                  'h-full rounded-full transition-all duration-700 ease-out',
+                  allocationComplete
+                    ? 'bg-emerald-400'
+                    : allocationOver ? 'bg-red-400' : allocatedPortion > 0 ? 'bg-amber-400' : 'bg-zinc-700',
+                )}
+                style={{ width: `${progressWidth}%` }}
+              />
             </div>
           </div>
 

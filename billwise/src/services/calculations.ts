@@ -101,16 +101,21 @@ function round(n: number) {
   return Math.round(n * 100) / 100
 }
 
-/** Returns portion coverage per item: { itemId -> totalPortionClaimed } */
+export function getAllocatedPortion(selections: ItemSelection[]): number {
+  const fixedTotal = selections
+    .filter((selection) => selection.portionPercentage < 100)
+    .reduce((sum, selection) => sum + selection.portionPercentage, 0)
+  const hasEqualShare = selections.some((selection) => selection.portionPercentage === 100)
+  return round(hasEqualShare ? fixedTotal + Math.max(0, 100 - fixedTotal) : fixedTotal)
+}
+
+/** Returns effective allocation per item: { itemId -> allocated percentage } */
 export function getItemPortionCoverage(
   items: BillItem[],
   selections: ItemSelection[],
 ): Record<string, number> {
   return items.reduce<Record<string, number>>((acc, item) => {
-    const total = selections
-      .filter((s) => s.itemId === item.id)
-      .reduce((sum, s) => sum + s.portionPercentage, 0)
-    acc[item.id] = total
+    acc[item.id] = getAllocatedPortion(selections.filter((selection) => selection.itemId === item.id))
     return acc
   }, {})
 }

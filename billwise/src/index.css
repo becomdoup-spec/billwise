@@ -97,6 +97,10 @@ input[type='range'].slider-brand::-moz-range-thumb {
   .anim-secret-ripple {
     animation: secretRipple 0.5s ease-out both;
   }
+  /* Gentle confirmation glow when an item reaches full allocation */
+  .anim-allocation-complete {
+    animation: allocationComplete 0.7s ease-out both;
+  }
 }
 
 /* ── Keyframes ───────────────────────────────────── */
@@ -146,6 +150,12 @@ input[type='range'].slider-brand::-moz-range-thumb {
   0%   { box-shadow: 0 0 0 0 rgba(212,149,106,0.4); }
   70%  { box-shadow: 0 0 0 12px rgba(212,149,106,0); }
   100% { box-shadow: 0 0 0 0 rgba(212,149,106,0); }
+}
+
+@keyframes allocationComplete {
+  0%   { box-shadow: inset 4px 0 0 rgba(52, 211, 153, 0); }
+  45%  { box-shadow: inset 4px 0 0 rgba(52, 211, 153, 0.75); }
+  100% { box-shadow: inset 2px 0 0 rgba(52, 211, 153, 0.3); }
 }
 
 @keyframes fadeIn {

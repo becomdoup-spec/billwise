@@ -4,6 +4,7 @@ import { useSessionSync } from '../hooks/useSessionSync'
 import {
   Users, Receipt, BarChart3, Lock, UserPlus, UserMinus,
   CheckCircle, AlertCircle, ChevronDown, ChevronUp, Clock, Sparkles, FileImage, Loader2, Pencil,
+  ImageDown, FileDown,
 } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
@@ -16,6 +17,7 @@ import {
 import { toast } from '../components/shared/Toast'
 import { Modal } from '../components/shared/Modal'
 import { dbGetBillImageUrl } from '../lib/db'
+import { downloadSplitImage, downloadSplitPdf } from '../services/splitExport'
 import clsx from 'clsx'
 
 type Tab = 'items' | 'split' | 'people'
@@ -37,6 +39,7 @@ export function SessionPage() {
   const [billImageSrc, setBillImageSrc] = useState('')
   const [billImageLoading, setBillImageLoading] = useState(false)
   const [editingUserId, setEditingUserId] = useState('')
+  const [exporting, setExporting] = useState<'image' | 'pdf' | ''>('')
 
   useSessionSync(id)
 
@@ -161,6 +164,30 @@ export function SessionPage() {
     (session.lockedParticipantIds ?? []).includes(p.id),
   ).length
 
+  const exportImage = async () => {
+    setExporting('image')
+    try {
+      await downloadSplitImage(session, splits)
+      toast.success('Final split image downloaded')
+    } catch {
+      toast.error('Final split image could not be created')
+    } finally {
+      setExporting('')
+    }
+  }
+
+  const exportPdf = async () => {
+    setExporting('pdf')
+    try {
+      await downloadSplitPdf(session, splits)
+      toast.success('Final split PDF downloaded')
+    } catch {
+      toast.error('Final split PDF could not be created')
+    } finally {
+      setExporting('')
+    }
+  }
+
   return (
     <Layout>
       <Header
@@ -233,7 +260,7 @@ export function SessionPage() {
             {/* Coverage warning */}
             {isAdmin && selectableItems.some((item) => {
               const cov = coverage[item.id] ?? 0
-              return cov > 100 || (cov < 100 && cov > 0)
+              return cov > 100.01 || (cov < 99.99 && cov > 0)
             }) && (
               <div className="mx-4 mt-3">
                 <button
@@ -248,11 +275,11 @@ export function SessionPage() {
                   <div className="mt-2 space-y-1">
                     {selectableItems.map((item) => {
                       const cov = coverage[item.id] ?? 0
-                      if (cov === 0 || cov === 100) return null
+                      if (cov === 0 || (cov >= 99.99 && cov <= 100.01)) return null
                       return (
                         <div key={item.id} className="flex items-center justify-between bg-surface-1 rounded-lg px-3 py-2 text-xs">
                           <span className="text-zinc-300 truncate flex-1">{item.name}</span>
-                          <span className={clsx('ml-2 font-medium', cov > 100 ? 'text-red-400' : 'text-yellow-400')}>
+                          <span className={clsx('ml-2 font-medium', cov > 100.01 ? 'text-red-400' : 'text-yellow-400')}>
                             {cov}% claimed
                           </span>
                         </div>
@@ -418,9 +445,33 @@ export function SessionPage() {
             {/* Final split — only when everyone locked */}
             {allParticipantsLocked ? (
               <div className="animate-fade-in space-y-3">
-                <div className="flex items-center gap-2 px-1">
-                  <Sparkles size={14} className="text-brand" />
-                  <p className="text-sm font-semibold text-white">Final Split</p>
+                <div className="flex items-center justify-between gap-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={14} className="text-brand" />
+                    <p className="text-sm font-semibold text-white">Final Split</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={exportImage}
+                      disabled={Boolean(exporting)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface-1 text-[11px] text-zinc-400 hover:text-white hover:border-brand/30 disabled:opacity-50 transition-all"
+                    >
+                      {exporting === 'image'
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : <ImageDown size={11} />}
+                      Image
+                    </button>
+                    <button
+                      onClick={exportPdf}
+                      disabled={Boolean(exporting)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface-1 text-[11px] text-zinc-400 hover:text-white hover:border-brand/30 disabled:opacity-50 transition-all"
+                    >
+                      {exporting === 'pdf'
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : <FileDown size={11} />}
+                      PDF
+                    </button>
+                  </div>
                 </div>
                 {splits.map((s) => {
                   const isMe = s.userId === viewingUserId
