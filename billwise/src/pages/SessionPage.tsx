@@ -66,11 +66,8 @@ export function SessionPage() {
   const mySelections = sessionSelections.filter((s) => s.userId === viewingUserId)
   const activeSelections = sessionSelections.filter((s) => s.userId === selectionUserId)
   const myLocked = (session.lockedParticipantIds ?? []).includes(viewingUserId)
-  const selectedItemIds = new Set(mySelections.map((selection) => selection.itemId))
   const selectableItems = items.filter((item) => !isBillSummaryItemName(item.name))
-  const visibleItems = !isAdmin && (myLocked || isSessionLocked)
-    ? selectableItems.filter((item) => selectedItemIds.has(item.id))
-    : selectableItems
+  const visibleItems = selectableItems
   const fixedBillTotal = getFixedBillTotal(items, session.totalAmount) ?? session.totalAmount
   const menuSubtotal = selectableItems.reduce((sum, item) => sum + item.totalPrice, 0)
   const sharedChargesTotal = Math.max(0, fixedBillTotal - menuSubtotal)
@@ -371,7 +368,7 @@ export function SessionPage() {
                 <div className="py-12 text-center">
                   <Receipt size={24} className="text-zinc-700 mx-auto mb-2" />
                   <p className="text-xs text-zinc-500">
-                    {!isAdmin && (myLocked || isSessionLocked) ? 'No items selected' : 'No items on this bill'}
+                    No items on this bill
                   </p>
                 </div>
               )}
