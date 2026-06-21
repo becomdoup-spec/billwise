@@ -4,11 +4,16 @@
  */
 import { useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { dbGetUsers, dbGetSessions, dbGetAllBillItems } from '../lib/db'
+import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections } from '../lib/db'
 import { useAppStore } from '../store/appStore'
 
 export function useSupabaseInit() {
-  const { hydrateFromSupabase, hydrateBillItemsFromSupabase, setCloudSyncState } = useAppStore()
+  const {
+    hydrateFromSupabase,
+    hydrateBillItemsFromSupabase,
+    hydrateSelectionsFromSupabase,
+    setCloudSyncState,
+  } = useAppStore()
 
   useEffect(() => {
     // Remove data persisted by older builds. Supabase is the source of truth.
@@ -20,10 +25,17 @@ export function useSupabaseInit() {
     const refresh = async () => {
       const version = ++refreshVersion
       try {
-        const [users, sessions, items] = await Promise.all([dbGetUsers(), dbGetSessions(), dbGetAllBillItems()])
+        const [users, sessions, items, selections] = await Promise.all([
+          dbGetUsers(),
+          dbGetSessions(),
+          dbGetAllBillItems(),
+          dbGetAllSelections(),
+        ])
         if (version !== refreshVersion) return
         hydrateFromSupabase(users, sessions)
         hydrateBillItemsFromSupabase(items)
+        // Keep this last: selectionsReady means every split input is hydrated.
+        hydrateSelectionsFromSupabase(selections)
       } catch (error) {
         if (version !== refreshVersion) return
         const message = error instanceof Error
@@ -43,6 +55,7 @@ export function useSupabaseInit() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'session_participants' }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_items' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'item_selections' }, refresh)
       .subscribe()
 
     const refreshTimer = window.setInterval(refresh, 10000)

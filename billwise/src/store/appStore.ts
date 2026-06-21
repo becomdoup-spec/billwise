@@ -18,6 +18,7 @@ interface AppStore {
   apiKey: string
   cloudReady: boolean
   cloudSyncError: string
+  selectionsReady: boolean
 
   // Auth
   currentUser: User | null
@@ -60,6 +61,7 @@ interface AppStore {
   hydrateFromSupabase: (users: User[], sessions: Session[]) => void
   setCloudSyncState: (ready: boolean, error?: string) => void
   hydrateBillItemsFromSupabase: (items: BillItem[]) => void
+  hydrateSelectionsFromSupabase: (selections: ItemSelection[]) => void
   updateSessionFromRealtime: (sessionId: string, data: Partial<Session>) => void
   setSelectionsForSession: (sessionId: string, sels: ItemSelection[]) => void
   updateBillItemFromRealtime: (sessionId: string, itemId: string, data: Partial<BillItem>) => void
@@ -82,6 +84,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       apiKey: '',
       cloudReady: !supabase,
       cloudSyncError: supabase ? '' : 'Supabase is not configured for this deployment',
+      selectionsReady: false,
       currentUser: null,
 
       setCurrentUser: (user) => set({ currentUser: user }),
@@ -409,6 +412,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
           return grouped
         }, {})
         set({ billItems })
+      },
+
+      hydrateSelectionsFromSupabase: (selections) => {
+        set({ selections, selectionsReady: true })
       },
 
       updateSessionFromRealtime: (sessionId, data) => {

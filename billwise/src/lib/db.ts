@@ -287,6 +287,13 @@ export async function dbGetSelections(sessionId: string): Promise<ItemSelection[
   return (data ?? []).map(rowToSelection)
 }
 
+export async function dbGetAllSelections(): Promise<ItemSelection[]> {
+  if (!supabase) return []
+  const { data, error } = await supabase.from('item_selections').select('*')
+  if (error) { console.error('[db] getAllSelections', error); throw error }
+  return (data ?? []).map(rowToSelection)
+}
+
 export async function dbUpsertSelection(sel: ItemSelection): Promise<void> {
   if (!supabase) return
   const { error } = await supabase.from('item_selections').upsert({

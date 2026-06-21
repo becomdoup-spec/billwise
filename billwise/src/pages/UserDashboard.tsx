@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Clock, CheckCircle, Lock, Sparkles } from 'lucide-react'
+import { Clock, CheckCircle, Lock, Sparkles, Loader2 } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
 import { useAppStore } from '../store/appStore'
@@ -8,7 +8,17 @@ import clsx from 'clsx'
 
 export function UserDashboard() {
   const navigate = useNavigate()
-  const { sessions, users, billItems, selections, currentUser } = useAppStore()
+  const {
+    sessions,
+    users,
+    billItems,
+    selections,
+    currentUser,
+    cloudReady,
+    cloudSyncError,
+    selectionsReady,
+  } = useAppStore()
+  const splitDataReady = cloudReady && selectionsReady && !cloudSyncError
 
   // Only show sessions that are public AND user is a participant
   const mySessions = sessions.filter(
@@ -72,13 +82,17 @@ export function UserDashboard() {
                       <p className="text-xs text-zinc-500 mt-0.5 font-mono">{session.orderId} · {session.date}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      {allLocked ? (
+                      {allLocked && splitDataReady ? (
                         <>
                           <p className="text-base font-bold text-brand">
                             {formatCurrency(mySplit?.grandTotal ?? 0)}
                           </p>
                           <p className="text-xs text-zinc-500 mt-0.5">your final share</p>
                         </>
+                      ) : allLocked ? (
+                        <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+                          <Loader2 size={11} className="animate-spin text-brand" /> Calculating…
+                        </p>
                       ) : (
                         <p className="text-xs text-zinc-500">Split pending</p>
                       )}
@@ -118,9 +132,13 @@ export function UserDashboard() {
                       <span className="flex items-center gap-1 text-xs text-blue-400">
                         <Lock size={10} /> Session closed
                       </span>
-                    ) : allLocked ? (
+                    ) : allLocked && splitDataReady ? (
                       <span className="flex items-center gap-1 text-xs text-green-400">
                         <CheckCircle size={10} /> All locked — final split ready
+                      </span>
+                    ) : allLocked ? (
+                      <span className="flex items-center gap-1 text-xs text-zinc-500">
+                        <Loader2 size={10} className="animate-spin text-brand" /> Loading final split…
                       </span>
                     ) : iMeLocked ? (
                       <span className="flex items-center gap-1 text-xs text-green-400">
