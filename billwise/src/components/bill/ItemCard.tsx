@@ -62,6 +62,7 @@ export function ItemCard({
   const [animClass, setAnimClass] = useState<string>('')
   const [lastClickTime, setLastClickTime] = useState(0)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressTriggered = useRef(false)
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isSelected = Boolean(selection)
@@ -94,16 +95,26 @@ export function ItemCard({
   // Long press
   const handlePointerDown = useCallback(() => {
     if (selectionLocked) return
-    longPressTimer.current = setTimeout(triggerPortionSlider, LONG_PRESS_MS)
+    longPressTriggered.current = false
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null
+      longPressTriggered.current = true
+      triggerPortionSlider()
+    }, LONG_PRESS_MS)
   }, [selectionLocked, triggerPortionSlider])
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current)
+    longPressTimer.current = null
   }, [])
 
   // Double-click on selected → portion slider; single click → toggle select
   const handleClick = useCallback(() => {
     if (selectionLocked) return
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false
+      return
+    }
     const now = Date.now()
     const sinceLastClick = now - lastClickTime
     setLastClickTime(now)
@@ -356,7 +367,7 @@ export function ItemCard({
       <Modal
         open={showSlider}
         onClose={() => setShowSlider(false)}
-        title="Your Portion"
+        title="Share this item"
         size="sm"
       >
         <PortionSlider

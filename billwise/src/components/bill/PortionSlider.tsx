@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import type { BillItem, ItemSelection, User } from '../../types'
 import { formatCurrency } from '../../services/calculations'
-import { Lock } from 'lucide-react'
+import { Check, Lock, Scale, SlidersHorizontal } from 'lucide-react'
 
 interface PortionSliderProps {
   item: BillItem
@@ -41,6 +41,9 @@ export function PortionSlider({
   onConfirm,
   onCancel,
 }: PortionSliderProps) {
+  const [shareMode, setShareMode] = useState<'equal' | 'custom'>(
+    currentPortion === 100 ? 'equal' : 'custom',
+  )
   const otherFixedPortions = otherSelections
     .filter((selection) => selection.portionPercentage < 100)
     .reduce((sum, selection) => sum + selection.portionPercentage, 0)
@@ -88,51 +91,102 @@ export function PortionSlider({
         <p className="text-[10px] text-zinc-600 mt-0.5">{formatCurrency(item.totalPrice)} total</p>
       </div>
 
-      {/* Big % display */}
-      <div className="text-center">
-        <div
-          key={animKey}
-          className="text-6xl font-bold tabular-nums anim-amount-change inline-block"
-          style={{ color: accentColor }}
+      {/* How this selection should be shared */}
+      <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-1 p-1.5 border border-border">
+        <button
+          type="button"
+          onClick={() => setShareMode('equal')}
+          className={`relative rounded-lg px-3 py-3 text-left border transition-all ${
+            shareMode === 'equal'
+              ? 'bg-brand/15 border-brand/40 text-white'
+              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+          }`}
         >
-          {formatPercentage(portion)}%
-        </div>
-        <p className="text-sm text-zinc-400 mt-1.5">
-          = <span className="text-white font-semibold">{formatCurrency(amount)}</span>
-        </p>
-        {remaining > 0 && remaining < maxPortion && (
-          <p className="text-xs text-zinc-600 mt-1">{remaining}% unallocated</p>
-        )}
+          <div className="flex items-center gap-2">
+            <Scale size={14} className={shareMode === 'equal' ? 'text-brand' : ''} />
+            <span className="text-xs font-semibold">Split equally</span>
+            {shareMode === 'equal' && <Check size={12} className="ml-auto text-brand" />}
+          </div>
+          <p className="text-[10px] leading-relaxed text-zinc-500 mt-1.5">
+            Share equally with everyone who selects this item.
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShareMode('custom')}
+          className={`relative rounded-lg px-3 py-3 text-left border transition-all ${
+            shareMode === 'custom'
+              ? 'bg-brand/15 border-brand/40 text-white'
+              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal size={14} className={shareMode === 'custom' ? 'text-brand' : ''} />
+            <span className="text-xs font-semibold">Set my portion</span>
+            {shareMode === 'custom' && <Check size={12} className="ml-auto text-brand" />}
+          </div>
+          <p className="text-[10px] leading-relaxed text-zinc-500 mt-1.5">
+            Enter the amount or percentage you consumed.
+          </p>
+        </button>
       </div>
 
-      {/* Absolute amount entry */}
-      <div className="bg-surface-2 border border-border rounded-xl p-3 space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium text-zinc-300">Enter your amount</p>
-            <p className="text-[10px] text-zinc-600 mt-0.5">Percentage is calculated automatically</p>
-          </div>
-          <div className="relative w-32">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">₹</span>
-            <input
-              type="number"
-              min={0}
-              max={round(item.totalPrice * (maxPortion / 100))}
-              step="0.01"
-              inputMode="decimal"
-              value={amountInput}
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => setAbsoluteAmount(event.target.value)}
-              onBlur={() => setAmountInput(amountInputValue(amount))}
-              className="w-full bg-surface-1 border border-border rounded-lg pl-7 pr-2 py-2 text-sm text-white text-right focus:outline-none focus:border-brand/60"
-              aria-label="Your absolute amount for this item"
-            />
-          </div>
+      {shareMode === 'equal' ? (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] px-4 py-4 text-center">
+          <p className="text-sm font-semibold text-emerald-300">No percentage needed</p>
+          <p className="text-xs leading-relaxed text-zinc-500 mt-1">
+            Your share will adjust automatically as other people select or leave this item.
+          </p>
         </div>
-        <p className="text-[10px] text-zinc-500 text-right">
-          {amountInput || '0'} of {formatCurrency(item.totalPrice)} = {formatPercentage(portion)}%
-        </p>
-      </div>
+      ) : (
+        <>
+          {/* Big % display */}
+          <div className="text-center">
+            <div
+              key={animKey}
+              className="text-6xl font-bold tabular-nums anim-amount-change inline-block"
+              style={{ color: accentColor }}
+            >
+              {formatPercentage(portion)}%
+            </div>
+            <p className="text-sm text-zinc-400 mt-1.5">
+              = <span className="text-white font-semibold">{formatCurrency(amount)}</span>
+            </p>
+            {remaining > 0 && remaining < maxPortion && (
+              <p className="text-xs text-zinc-600 mt-1">{remaining}% unallocated</p>
+            )}
+          </div>
+
+          {/* Absolute amount entry */}
+          <div className="bg-surface-2 border border-border rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium text-zinc-300">Enter your amount</p>
+                <p className="text-[10px] text-zinc-600 mt-0.5">Percentage is calculated automatically</p>
+              </div>
+              <div className="relative w-32">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">₹</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={round(item.totalPrice * (maxPortion / 100))}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={amountInput}
+                  onFocus={(event) => event.currentTarget.select()}
+                  onChange={(event) => setAbsoluteAmount(event.target.value)}
+                  onBlur={() => setAmountInput(amountInputValue(amount))}
+                  className="w-full bg-surface-1 border border-border rounded-lg pl-7 pr-2 py-2 text-sm text-white text-right focus:outline-none focus:border-brand/60"
+                  aria-label="Your absolute amount for this item"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-zinc-500 text-right">
+              {amountInput || '0'} of {formatCurrency(item.totalPrice)} = {formatPercentage(portion)}%
+            </p>
+          </div>
+        </>
+      )}
 
       {/* Others who selected this item */}
       {otherSelections.length > 0 && (
@@ -150,7 +204,9 @@ export function PortionSlider({
                   {user.name[0]?.toUpperCase()}
                 </div>
                 <span className="text-xs text-zinc-400">{user.name.split(' ')[0]}</span>
-                <span className="text-xs font-medium" style={{ color: accentColor }}>{sel.portionPercentage}%</span>
+                <span className="text-xs font-medium" style={{ color: accentColor }}>
+                  {sel.portionPercentage === 100 ? 'Equal share' : `${sel.portionPercentage}%`}
+                </span>
                 {isLocked && <Lock size={9} className="text-zinc-500" />}
               </div>
             )
@@ -159,7 +215,7 @@ export function PortionSlider({
       )}
 
       {/* Track + slider */}
-      <div className="space-y-1 px-1">
+      {shareMode === 'custom' && <div className="space-y-1 px-1">
         {/* Notch marks */}
         <div className="relative h-3 flex items-end mb-1" ref={trackRef}>
           {notches.map((n) => (
@@ -198,10 +254,10 @@ export function PortionSlider({
           <span>0%</span>
           <span>{maxPortion}%</span>
         </div>
-      </div>
+      </div>}
 
       {/* Presets */}
-      <div>
+      {shareMode === 'custom' && <div>
         <p className="text-[10px] font-medium text-zinc-600 uppercase tracking-wider mb-2">Quick select</p>
         <div className="flex flex-wrap gap-1.5">
           {presets.map((p) => (
@@ -219,7 +275,7 @@ export function PortionSlider({
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Actions */}
       <div className="flex gap-3 pt-1">
@@ -230,12 +286,12 @@ export function PortionSlider({
           Cancel
         </button>
         <button
-          onClick={() => onConfirm(portion)}
-          disabled={portion === 0}
+          onClick={() => onConfirm(shareMode === 'equal' ? 100 : portion)}
+          disabled={shareMode === 'custom' && portion === 0}
           className="flex-[2] py-3 rounded-xl text-sm font-semibold text-surface-0 transition-all active:scale-95 disabled:bg-surface-3 disabled:text-zinc-600"
-          style={portion > 0 ? { background: accentColor } : {}}
+          style={shareMode === 'equal' || portion > 0 ? { background: '#d4956a' } : {}}
         >
-          Set {formatPercentage(portion)}%
+          {shareMode === 'equal' ? 'Split equally' : `Set ${formatPercentage(portion)}%`}
         </button>
       </div>
     </div>

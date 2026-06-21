@@ -224,6 +224,14 @@ export function SessionPage() {
           <p className="text-xs text-zinc-500 mt-0.5">
             {lockedCount}/{participants.length} done
           </p>
+          {!isAdmin && myLocked && !isSessionLocked && (
+            <button
+              onClick={handleUnlockMine}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/20 transition-colors"
+            >
+              <Lock size={11} /> Unlock selections
+            </button>
+          )}
         </div>
       </div>
 
@@ -651,37 +659,20 @@ export function SessionPage() {
       </div>
 
       {/* Bottom action bar */}
-      {!isAdmin && !isSessionLocked && tab === 'items' && (
+      {!isAdmin && !isSessionLocked && tab === 'items' && !myLocked && (
         <div className="border-t border-border bg-surface-0/95 backdrop-blur-sm px-4 py-3 pb-safe">
-          {myLocked ? (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 flex-1">
-                <CheckCircle size={16} className="text-green-400" />
-                <span className="text-sm text-green-400 font-medium">Your selections are locked</span>
-              </div>
-              {!isSessionLocked && (
-                <button
-                  onClick={handleUnlockMine}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  Unlock
-                </button>
-              )}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-zinc-500">
+              <span>{mySelections.length} item{mySelections.length !== 1 ? 's' : ''} selected</span>
+              <span>Review before locking</span>
             </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-zinc-500">
-                <span>{mySelections.length} item{mySelections.length !== 1 ? 's' : ''} selected</span>
-                <span>Review before locking</span>
-              </div>
-              <button
-                onClick={handleLockMine}
-                className="w-full py-3 bg-brand hover:bg-brand-light rounded-xl text-sm font-semibold text-surface-0 transition-all active:scale-98"
-              >
-                Lock My Selections
-              </button>
-            </div>
-          )}
+            <button
+              onClick={handleLockMine}
+              className="w-full py-3 bg-brand hover:bg-brand-light rounded-xl text-sm font-semibold text-surface-0 transition-all active:scale-98"
+            >
+              Lock My Selections
+            </button>
+          </div>
         </div>
       )}
 
