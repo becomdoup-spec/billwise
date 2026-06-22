@@ -122,34 +122,34 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           className={clsx(
             'relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all',
             state === 'error'
-              ? 'border-red-500/40 bg-red-500/5'
-              : 'border-border hover:border-brand/40 hover:bg-brand/5',
+              ? 'border-danger/40 bg-danger/5'
+              : 'border-line hover:border-primary/40 hover:bg-primary/5',
           )}
         >
           <input ref={fileRef} type="file" accept="image/*,.heic,.heif" className="hidden" onChange={onFileChange} />
           <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-surface-3 border border-border flex items-center justify-center">
-              <Image size={22} className="text-zinc-400" />
+            <div className="w-12 h-12 rounded-xl bg-surface-overlay border border-line flex items-center justify-center">
+              <Image size={22} className="text-fg-muted" />
             </div>
             <div>
-              <p className="text-sm font-medium text-white">Drop bill image here</p>
-              <p className="text-xs text-zinc-500 mt-1">or tap to browse · JPG, PNG, WebP, HEIC</p>
+              <p className="text-sm font-medium text-fg">Drop bill image here</p>
+              <p className="text-xs text-fg-subtle mt-1">or tap to browse · JPG, PNG, WebP, HEIC</p>
             </div>
           </div>
         </div>
 
         {/* OCR badge */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-surface-1 border border-border rounded-xl">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-          <p className="text-xs text-zinc-500">
+        <div className="flex items-center gap-2 px-3 py-2 bg-surface border border-line rounded-xl">
+          <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+          <p className="text-xs text-fg-subtle">
             Reads bills locally on this device.
           </p>
         </div>
 
         {state === 'error' && (
-          <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/20 rounded-xl p-4">
-            <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
-            <p className="text-sm text-red-300">{errorMsg}</p>
+          <div className="flex items-start gap-3 bg-danger/10 border border-danger/20 rounded-xl p-4">
+            <AlertCircle size={16} className="text-danger shrink-0 mt-0.5" />
+            <p className="text-sm text-danger">{errorMsg}</p>
           </div>
         )}
 
@@ -159,7 +159,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
               const empty = emptyParsedBill()
               setParsed(empty); setEditBill(empty); setEditMode(true); setState('done')
             }}
-            className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+            className="text-xs text-fg-subtle hover:text-fg-muted underline underline-offset-2 transition-colors"
           >
             Enter bill manually instead
           </button>
@@ -183,28 +183,28 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     return (
       <div className="flex flex-col items-center gap-5 py-8">
         {preview && (
-          <div className="w-24 h-24 rounded-xl overflow-hidden border border-border">
+          <div className="w-24 h-24 rounded-xl overflow-hidden border border-line">
             <img src={preview} alt="bill" className="w-full h-full object-cover object-top" />
           </div>
         )}
 
         <div className="w-full space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-zinc-400 flex items-center gap-2">
-              <Loader2 size={13} className="animate-spin text-brand" />
+            <span className="text-fg-muted flex items-center gap-2">
+              <Loader2 size={13} className="animate-spin text-primary" />
               {label}
             </span>
-            <span className="text-zinc-500 font-mono">{pct}%</span>
+            <span className="text-fg-subtle font-mono">{pct}%</span>
           </div>
-          <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-surface-overlay rounded-full overflow-hidden">
             <div
-              className="h-full bg-brand rounded-full transition-all duration-300"
+              className="h-full bg-primary rounded-full transition-all duration-300"
               style={{ width: `${pct}%` }}
             />
           </div>
         </div>
 
-        <p className="text-xs text-zinc-600 text-center">
+        <p className="text-xs text-fg-faint text-center">
           OCR runs entirely on your device · nothing is sent to any server
         </p>
       </div>
@@ -216,8 +216,8 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <CheckCircle size={16} className="text-green-400" />
-          <span className="text-sm font-medium text-white">
+          <CheckCircle size={16} className="text-success" />
+          <span className="text-sm font-medium text-fg">
             {preview ? 'Bill read successfully' : 'Manual entry'}
           </span>
         </div>
@@ -227,8 +227,8 @@ export function BillUpload({ onParsed }: BillUploadProps) {
             className={clsx(
               'text-xs px-3 py-1.5 rounded-lg border transition-all',
               editMode
-                ? 'bg-brand/20 border-brand/40 text-brand'
-                : 'bg-surface-3 border-border text-zinc-400 hover:text-white',
+                ? 'bg-primary/20 border-primary/40 text-primary'
+                : 'bg-surface-overlay border-line text-fg-muted hover:text-fg',
             )}
           >
             {editMode ? 'Editing' : 'Edit'}
@@ -236,7 +236,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           {preview && (
             <button
               onClick={() => { setState('idle'); setPreview(''); setParsed(null) }}
-              className="text-xs px-3 py-1.5 rounded-lg border border-border bg-surface-3 text-zinc-400 hover:text-white transition-all"
+              className="text-xs px-3 py-1.5 rounded-lg border border-line bg-surface-overlay text-fg-muted hover:text-fg transition-all"
             >
               Re-upload
             </button>
@@ -246,49 +246,49 @@ export function BillUpload({ onParsed }: BillUploadProps) {
 
       {/* Image preview thumbnail */}
       {preview && !editMode && (
-        <div className="w-full h-32 rounded-xl overflow-hidden border border-border">
+        <div className="w-full h-32 rounded-xl overflow-hidden border border-line">
           <img src={preview} alt="uploaded bill" className="w-full h-full object-cover object-top" />
         </div>
       )}
 
       {/* Restaurant & date */}
-      <div className="bg-surface-1 rounded-xl border border-border p-4 space-y-3">
+      <div className="bg-surface rounded-xl border border-line p-4 space-y-3">
         {editMode ? (
           <div className="space-y-2">
             <input
               value={editBill.restaurantName}
               onChange={(e) => setEditBill({ ...editBill, restaurantName: e.target.value })}
               placeholder="Restaurant name"
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-brand/60"
+              className="w-full bg-surface-raised border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60"
             />
             <input
               type="date"
               value={editBill.date}
               onChange={(e) => setEditBill({ ...editBill, date: e.target.value })}
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand/60"
+              className="w-full bg-surface-raised border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-primary/60"
             />
           </div>
         ) : (
           <div>
-            <p className="text-base font-semibold text-white">{bill?.restaurantName || 'Unknown Restaurant'}</p>
-            <p className="text-xs text-zinc-500 mt-0.5">{bill?.date}</p>
+            <p className="text-base font-semibold text-fg">{bill?.restaurantName || 'Unknown Restaurant'}</p>
+            <p className="text-xs text-fg-subtle mt-0.5">{bill?.date}</p>
           </div>
         )}
       </div>
 
       {/* Items */}
-      <div className="bg-surface-1 rounded-xl border border-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+      <div className="bg-surface rounded-xl border border-line overflow-hidden">
+        <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+          <span className="text-xs font-medium text-fg-muted uppercase tracking-wider">
             Items {bill?.items.length ? `(${bill.items.length})` : ''}
           </span>
           {editMode && (
-            <button onClick={addItem} className="flex items-center gap-1 text-xs text-brand hover:text-brand-light transition-colors">
+            <button onClick={addItem} className="flex items-center gap-1 text-xs text-primary hover:text-primary-hover transition-colors">
               <Plus size={12} /> Add item
             </button>
           )}
         </div>
-        <div className="divide-y divide-border">
+        <div className="divide-y divide-line">
           {(bill?.items ?? []).map((item, idx) => (
             <div key={idx} className="px-4 py-3">
               {editMode ? (
@@ -298,44 +298,44 @@ export function BillUpload({ onParsed }: BillUploadProps) {
                       value={item.name}
                       onChange={(e) => updateItem(idx, 'name', e.target.value)}
                       placeholder="Item name"
-                      className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-brand/60"
+                      className="flex-1 bg-surface-raised border border-line rounded-lg px-3 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60"
                     />
-                    <button onClick={() => removeItem(idx)} className="p-1.5 text-zinc-600 hover:text-red-400 transition-colors">
+                    <button onClick={() => removeItem(idx)} className="p-1.5 text-fg-faint hover:text-danger transition-colors">
                       <Trash2 size={14} />
                     </button>
                   </div>
                   <div className="flex gap-2">
                     <div className="flex items-center gap-1 flex-1">
-                      <span className="text-xs text-zinc-500 shrink-0">Qty</span>
+                      <span className="text-xs text-fg-subtle shrink-0">Qty</span>
                       <button
                         type="button"
                         onClick={() => updateItem(idx, 'quantity', Math.max(1, item.quantity - 1))}
-                        className="w-7 h-8 rounded-lg border border-border bg-surface-2 text-zinc-400 hover:text-white"
+                        className="w-7 h-8 rounded-lg border border-line bg-surface-raised text-fg-muted hover:text-fg"
                       >−</button>
                       <input
                         type="number" min="1" step="1" inputMode="numeric"
                         value={item.quantity || ''}
                         onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => updateItem(idx, 'quantity', Math.max(1, e.currentTarget.valueAsNumber || 1))}
-                        className="w-14 bg-surface-2 border border-border rounded-lg px-1 py-1.5 text-sm text-white text-center focus:outline-none focus:border-brand/60"
+                        className="w-14 bg-surface-raised border border-line rounded-lg px-1 py-1.5 text-sm text-fg text-center focus:outline-none focus:border-primary/60"
                       />
                       <button
                         type="button"
                         onClick={() => updateItem(idx, 'quantity', item.quantity + 1)}
-                        className="w-7 h-8 rounded-lg border border-border bg-surface-2 text-zinc-400 hover:text-white"
+                        className="w-7 h-8 rounded-lg border border-line bg-surface-raised text-fg-muted hover:text-fg"
                       >+</button>
                     </div>
                     <div className="flex items-center gap-1 flex-1">
-                      <span className="text-xs text-zinc-500 shrink-0">₹</span>
+                      <span className="text-xs text-fg-subtle shrink-0">₹</span>
                       <input
                         type="number" min="0" step="0.01"
                         value={item.unitPrice || ''}
                         onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => updateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
-                        className="w-full bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand/60"
+                        className="w-full bg-surface-raised border border-line rounded-lg px-2 py-1.5 text-sm text-fg focus:outline-none focus:border-primary/60"
                       />
                     </div>
-                    <div className="text-sm font-medium text-white py-1.5 shrink-0">
+                    <div className="text-sm font-medium text-fg py-1.5 shrink-0">
                       {formatCurrency(item.totalPrice)}
                     </div>
                   </div>
@@ -343,12 +343,12 @@ export function BillUpload({ onParsed }: BillUploadProps) {
               ) : (
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">{item.name}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">
+                    <p className="text-sm text-fg truncate">{item.name}</p>
+                    <p className="text-xs text-fg-subtle mt-0.5">
                       {item.quantity > 1 ? `${item.quantity} × ${formatCurrency(item.unitPrice)}` : formatCurrency(item.unitPrice)}
                     </p>
                   </div>
-                  <span className="text-sm font-medium text-white shrink-0">{formatCurrency(item.totalPrice)}</span>
+                  <span className="text-sm font-medium text-fg shrink-0">{formatCurrency(item.totalPrice)}</span>
                 </div>
               )}
             </div>
@@ -356,8 +356,8 @@ export function BillUpload({ onParsed }: BillUploadProps) {
 
           {(bill?.items?.length ?? 0) === 0 && (
             <div className="py-6 text-center">
-              <p className="text-xs text-zinc-500">No items detected</p>
-              <button onClick={() => setEditMode(true)} className="text-xs text-brand mt-1 hover:underline">
+              <p className="text-xs text-fg-subtle">No items detected</p>
+              <button onClick={() => setEditMode(true)} className="text-xs text-primary mt-1 hover:underline">
                 Add items manually
               </button>
             </div>
@@ -366,15 +366,15 @@ export function BillUpload({ onParsed }: BillUploadProps) {
       </div>
 
       {/* Tax & total */}
-      <div className="bg-surface-1 rounded-xl border border-border p-4 space-y-2">
+      <div className="bg-surface rounded-xl border border-line p-4 space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="text-zinc-400">Subtotal</span>
-          <span className="text-white">{formatCurrency(bill?.subtotal ?? 0)}</span>
+          <span className="text-fg-muted">Subtotal</span>
+          <span className="text-fg">{formatCurrency(bill?.subtotal ?? 0)}</span>
         </div>
         {editMode ? (
           <>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-zinc-400">CGST</span>
+              <span className="text-sm text-fg-muted">CGST</span>
               <input
                 type="number" min="0" step="0.01"
                 value={editBill.cgst || ''}
@@ -383,11 +383,11 @@ export function BillUpload({ onParsed }: BillUploadProps) {
                   const cgst = parseFloat(e.target.value) || 0
                   setEditBill((b) => ({ ...b, cgst, totalAmount: b.subtotal + cgst + b.sgst }))
                 }}
-                className="w-28 bg-surface-2 border border-border rounded-lg px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-brand/60"
+                className="w-28 bg-surface-raised border border-line rounded-lg px-2 py-1 text-sm text-fg text-right focus:outline-none focus:border-primary/60"
               />
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-zinc-400">SGST</span>
+              <span className="text-sm text-fg-muted">SGST</span>
               <input
                 type="number" min="0" step="0.01"
                 value={editBill.sgst || ''}
@@ -396,7 +396,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
                   const sgst = parseFloat(e.target.value) || 0
                   setEditBill((b) => ({ ...b, sgst, totalAmount: b.subtotal + b.cgst + sgst }))
                 }}
-                className="w-28 bg-surface-2 border border-border rounded-lg px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-brand/60"
+                className="w-28 bg-surface-raised border border-line rounded-lg px-2 py-1 text-sm text-fg text-right focus:outline-none focus:border-primary/60"
               />
             </div>
           </>
@@ -404,30 +404,30 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           <>
             {(bill?.cgst ?? 0) > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-zinc-400">CGST</span>
-                <span className="text-zinc-300">{formatCurrency(bill?.cgst ?? 0)}</span>
+                <span className="text-fg-muted">CGST</span>
+                <span className="text-fg-muted">{formatCurrency(bill?.cgst ?? 0)}</span>
               </div>
             )}
             {(bill?.sgst ?? 0) > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-zinc-400">SGST</span>
-                <span className="text-zinc-300">{formatCurrency(bill?.sgst ?? 0)}</span>
+                <span className="text-fg-muted">SGST</span>
+                <span className="text-fg-muted">{formatCurrency(bill?.sgst ?? 0)}</span>
               </div>
             )}
           </>
         )}
-        <div className="flex items-center justify-between gap-3 text-sm font-semibold pt-2 border-t border-border">
-          <span className="text-white">Invoice total</span>
+        <div className="flex items-center justify-between gap-3 text-sm font-semibold pt-2 border-t border-line">
+          <span className="text-fg">Invoice total</span>
           {editMode ? (
             <input
               type="number" min="0" step="0.01" inputMode="decimal"
               value={editBill.totalAmount || ''}
               onFocus={(e) => e.currentTarget.select()}
               onChange={(e) => setEditBill((b) => ({ ...b, totalAmount: e.currentTarget.valueAsNumber || 0 }))}
-              className="w-32 bg-surface-2 border border-border rounded-lg px-2 py-1 text-sm text-brand text-right focus:outline-none focus:border-brand/60"
+              className="w-32 bg-surface-raised border border-line rounded-lg px-2 py-1 text-sm text-primary text-right focus:outline-none focus:border-primary/60"
             />
           ) : (
-            <span className="text-brand">{formatCurrency(bill?.totalAmount ?? 0)}</span>
+            <span className="text-primary">{formatCurrency(bill?.totalAmount ?? 0)}</span>
           )}
         </div>
       </div>
@@ -435,7 +435,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
       <button
         onClick={handleConfirm}
         disabled={!bill?.items.length}
-        className="w-full py-3.5 bg-brand hover:bg-brand-light disabled:bg-surface-3 disabled:text-zinc-600 rounded-xl text-sm font-semibold text-surface-0 transition-all active:scale-98"
+        className="w-full py-3.5 bg-primary hover:bg-primary-hover btn-sheen shadow-glow disabled:shadow-none disabled:bg-surface-overlay disabled:text-fg-faint rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-98"
       >
         Use This Bill →
       </button>

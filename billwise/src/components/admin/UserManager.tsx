@@ -56,7 +56,7 @@ export function UserManager() {
       {/* Admins */}
       <section>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Admins</span>
+          <span className="text-xs font-medium text-fg-subtle uppercase tracking-wider">Admins</span>
         </div>
         <div className="space-y-2">
           {adminUsers.map((u) => (
@@ -68,19 +68,19 @@ export function UserManager() {
       {/* Members */}
       <section>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Members ({regularUsers.length})</span>
+          <span className="text-xs font-medium text-fg-subtle uppercase tracking-wider">Members ({regularUsers.length})</span>
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1 text-xs text-brand hover:text-brand-light transition-colors"
+            className="flex items-center gap-1 text-xs text-primary hover:text-primary-hover transition-colors"
           >
             <Plus size={12} /> Add member
           </button>
         </div>
         {regularUsers.length === 0 ? (
-          <div className="text-center py-8 bg-surface-1 rounded-xl border border-border border-dashed">
-            <User size={24} className="text-zinc-700 mx-auto mb-2" />
-            <p className="text-xs text-zinc-500">No members yet</p>
-            <button onClick={() => setShowAdd(true)} className="text-xs text-brand mt-1 hover:underline">
+          <div className="text-center py-8 bg-surface rounded-xl border border-line border-dashed">
+            <User size={24} className="text-fg-faint mx-auto mb-2" />
+            <p className="text-xs text-fg-subtle">No members yet</p>
+            <button onClick={() => setShowAdd(true)} className="text-xs text-primary mt-1 hover:underline">
               Add your first member
             </button>
           </div>
@@ -97,36 +97,36 @@ export function UserManager() {
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Member">
         <div className="space-y-4">
           <div>
-            <label className="text-xs text-zinc-400 mb-1.5 block">Name</label>
+            <label className="text-xs text-fg-muted mb-1.5 block">Name</label>
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="e.g. Priya"
               autoFocus
-              className="w-full bg-surface-1 border border-border rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-brand/60"
+              className="w-full bg-surface border border-line rounded-xl px-4 py-3 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60"
             />
           </div>
           <div>
-            <label className="text-xs text-zinc-400 mb-1.5 block">PIN (4 digits)</label>
+            <label className="text-xs text-fg-muted mb-1.5 block">PIN (4 digits)</label>
             <div className="relative">
               <input
                 type={showNewPin ? 'text' : 'password'}
                 value={newPin}
                 onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="••••"
-                className="w-full bg-surface-1 border border-border rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-brand/60 font-mono tracking-widest"
+                className="w-full bg-surface border border-line rounded-xl px-4 py-3 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60 font-mono tracking-widest"
               />
               <button
                 type="button"
                 onClick={() => setShowNewPin((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted"
               >
                 {showNewPin ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
           <div>
-            <label className="text-xs text-zinc-400 mb-1.5 block">Role</label>
+            <label className="text-xs text-fg-muted mb-1.5 block">Role</label>
             <div className="flex gap-2">
               {(['user', 'admin'] as const).map((r) => (
                 <button
@@ -135,8 +135,8 @@ export function UserManager() {
                   className={clsx(
                     'flex-1 py-2.5 rounded-xl text-sm border transition-all capitalize',
                     newRole === r
-                      ? 'bg-brand/20 border-brand/40 text-brand font-medium'
-                      : 'bg-surface-1 border-border text-zinc-400 hover:text-white',
+                      ? 'bg-primary/20 border-primary/40 text-primary font-medium'
+                      : 'bg-surface border-line text-fg-muted hover:text-fg',
                   )}
                 >
                   {r === 'admin' ? '🔐 Admin' : '👤 Member'}
@@ -146,7 +146,7 @@ export function UserManager() {
           </div>
           <button
             onClick={handleAdd}
-            className="w-full py-3 bg-brand hover:bg-brand-light rounded-xl text-sm font-semibold text-surface-0 transition-all active:scale-98"
+            className="w-full py-3 bg-primary hover:bg-primary-hover btn-sheen shadow-glow disabled:shadow-none rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-98"
           >
             Add {newRole === 'admin' ? 'Admin' : 'Member'}
           </button>
@@ -156,8 +156,8 @@ export function UserManager() {
       {/* Edit PIN modal */}
       <Modal open={!!pinEditId} onClose={() => { setPinEditId(null); setNewPinValue('') }} title="Reset PIN">
         <div className="space-y-4">
-          <p className="text-sm text-zinc-400">
-            Setting new PIN for <strong className="text-white">{users.find((u) => u.id === pinEditId)?.name}</strong>
+          <p className="text-sm text-fg-muted">
+            Setting new PIN for <strong className="text-fg">{users.find((u) => u.id === pinEditId)?.name}</strong>
           </p>
           <div className="relative">
             <input
@@ -166,19 +166,19 @@ export function UserManager() {
               onChange={(e) => setNewPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
               placeholder="New 4-digit PIN"
               autoFocus
-              className="w-full bg-surface-1 border border-border rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-brand/60 font-mono tracking-widest"
+              className="w-full bg-surface border border-line rounded-xl px-4 py-3 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60 font-mono tracking-widest"
             />
             <button
               type="button"
               onClick={() => setShowNewPin((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted"
             >
               {showNewPin ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
           <button
             onClick={handlePinUpdate}
-            className="w-full py-3 bg-brand hover:bg-brand-light rounded-xl text-sm font-semibold text-surface-0 transition-all"
+            className="w-full py-3 bg-primary hover:bg-primary-hover btn-sheen shadow-glow disabled:shadow-none rounded-xl text-sm font-semibold text-primary-fg transition-all"
           >
             Save New PIN
           </button>
@@ -186,13 +186,13 @@ export function UserManager() {
       </Modal>
 
       <Modal open={!!userToDelete} onClose={() => setUserToDelete(null)} title="Remove member" size="sm">
-        <p className="text-sm text-zinc-400 leading-relaxed">
-          Remove <strong className="text-white">{userToDelete?.name}</strong> from BillWise and all sessions? This cannot be undone.
+        <p className="text-sm text-fg-muted leading-relaxed">
+          Remove <strong className="text-fg">{userToDelete?.name}</strong> from BillWise and all sessions? This cannot be undone.
         </p>
         <div className="flex gap-2 mt-5">
           <button
             onClick={() => setUserToDelete(null)}
-            className="flex-1 py-2.5 rounded-xl border border-border text-sm text-zinc-300 hover:bg-surface-3 transition-colors"
+            className="flex-1 py-2.5 rounded-xl border border-line text-sm text-fg-muted hover:bg-surface-overlay transition-colors"
           >
             Cancel
           </button>
@@ -207,7 +207,7 @@ export function UserManager() {
                 toast.error('Member could not be removed from the database')
               }
             }}
-            className="flex-1 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/25 transition-colors"
+            className="flex-1 py-2.5 rounded-xl bg-danger/15 border border-danger/30 text-sm font-medium text-danger hover:bg-danger/25 transition-colors"
           >
             Remove member
           </button>
@@ -219,30 +219,30 @@ export function UserManager() {
 
 function UserRow({ user, onPinEdit, onDelete }: { user: { id: string; name: string; role: string }; onPinEdit: () => void; onDelete: () => void }) {
   return (
-    <div className="flex items-center gap-3 bg-surface-1 border border-border rounded-xl px-4 py-3">
+    <div className="flex items-center gap-3 bg-surface border border-line rounded-xl px-4 py-3">
       <div className={clsx(
         'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0',
-        user.role === 'admin' ? 'bg-brand/20 text-brand' : 'bg-surface-3 text-zinc-300',
+        user.role === 'admin' ? 'bg-primary/20 text-primary' : 'bg-surface-overlay text-fg-muted',
       )}>
         {user.name[0]?.toUpperCase()}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white truncate">{user.name}</p>
-        <p className="text-xs text-zinc-500 flex items-center gap-1">
+        <p className="text-sm font-medium text-fg truncate">{user.name}</p>
+        <p className="text-xs text-fg-subtle flex items-center gap-1">
           {user.role === 'admin' ? <Shield size={10} /> : <User size={10} />}
           {user.role}
         </p>
       </div>
       <button
         onClick={onPinEdit}
-        className="p-2 text-zinc-500 hover:text-zinc-300 transition-colors"
+        className="p-2 text-fg-subtle hover:text-fg-muted transition-colors"
         title="Reset PIN"
       >
         <KeyRound size={15} />
       </button>
       <button
         onClick={onDelete}
-        className="flex items-center gap-1 px-2 py-2 text-xs text-zinc-500 hover:text-red-400 transition-colors"
+        className="flex items-center gap-1 px-2 py-2 text-xs text-fg-subtle hover:text-danger transition-colors"
         title="Delete user"
       >
         <Trash2 size={14} /> Remove

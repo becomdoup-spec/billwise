@@ -55,7 +55,7 @@ export function PinPad({ onComplete, error, label, maxLength = 6 }: PinPadProps)
 
   return (
     <div className="flex flex-col items-center gap-6">
-      {label && <p className="text-sm text-zinc-400">{label}</p>}
+      {label && <p className="text-sm text-fg-muted">{label}</p>}
 
       {/* PIN dots */}
       <div className={clsx('flex gap-3 transition-all', shake && 'animate-[shake_0.4s_ease-in-out]')}>
@@ -65,15 +65,15 @@ export function PinPad({ onComplete, error, label, maxLength = 6 }: PinPadProps)
             className={clsx(
               'w-3.5 h-3.5 rounded-full border-2 transition-all duration-200',
               i < pin.length
-                ? 'bg-brand border-brand scale-110'
-                : 'bg-transparent border-zinc-700',
+                ? 'bg-primary border-primary scale-110'
+                : 'bg-transparent border-line-strong',
             )}
           />
         ))}
       </div>
 
       {error && (
-        <p className="text-xs text-red-400 text-center animate-fade-in -mt-2">{error}</p>
+        <p className="text-xs text-danger text-center animate-fade-in -mt-2">{error}</p>
       )}
 
       {/* Number pad */}
@@ -84,11 +84,12 @@ export function PinPad({ onComplete, error, label, maxLength = 6 }: PinPadProps)
             <button
               key={key + idx}
               onClick={() => handleKey(key)}
+              aria-label={key === 'del' ? 'Delete' : `Digit ${key}`}
               className={clsx(
                 'h-14 rounded-2xl text-lg font-medium transition-all duration-150 active:scale-90',
                 key === 'del'
-                  ? 'bg-surface-3 border border-border text-zinc-400 hover:text-white hover:bg-surface-4'
-                  : 'bg-surface-2 border border-border text-white hover:bg-surface-3 hover:border-border-light',
+                  ? 'bg-surface-overlay border border-line text-fg-muted hover:text-fg hover:bg-surface-hover'
+                  : 'bg-surface border border-line text-fg hover:bg-surface-overlay hover:border-line-strong',
               )}
             >
               {key === 'del' ? <Delete size={18} className="mx-auto" /> : key}

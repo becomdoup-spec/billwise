@@ -1,6 +1,7 @@
 import { ArrowLeft, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../store/appStore'
+import { ThemeToggle } from './ThemeToggle'
 
 interface HeaderProps {
   title: string
@@ -26,30 +27,33 @@ export function Header({ title, subtitle, back, onBack, showLogout, rightAction 
   }
 
   return (
-    <header className="sticky top-0 z-40 bg-surface-0/90 backdrop-blur-md border-b border-border px-4 py-3">
+    <header className="sticky top-0 z-40 bg-canvas/80 backdrop-blur-xl border-b border-line px-4 py-3">
       <div className="flex items-center gap-3">
         {back && (
           <button
             onClick={handleBack}
-            className="p-2 -ml-2 rounded-xl text-zinc-400 hover:text-white hover:bg-surface-2 transition-all active:scale-95"
+            aria-label="Go back"
+            className="p-2 -ml-2 rounded-xl text-fg-subtle hover:text-fg hover:bg-surface-overlay transition-all duration-200 active:scale-95"
           >
             <ArrowLeft size={20} />
           </button>
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="text-base font-semibold text-white truncate">{title}</h1>
-          {subtitle && <p className="text-xs text-zinc-500 truncate mt-0.5">{subtitle}</p>}
+          <h1 className="text-base font-semibold text-fg truncate tracking-tight">{title}</h1>
+          {subtitle && <p className="text-xs text-fg-subtle truncate mt-0.5">{subtitle}</p>}
         </div>
         {rightAction}
+        <ThemeToggle />
         {showLogout && currentUser && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500 hidden sm:block">
+            <span className="text-xs text-fg-subtle hidden sm:block">
               {currentUser.name}
             </span>
             <button
               onClick={handleLogout}
-              className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-surface-2 transition-all active:scale-95"
+              className="p-2 rounded-xl text-fg-subtle hover:text-fg hover:bg-surface-overlay transition-all duration-200 active:scale-95"
               title="Sign out"
+              aria-label="Sign out"
             >
               <LogOut size={18} />
             </button>

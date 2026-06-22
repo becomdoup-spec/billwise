@@ -80,34 +80,40 @@ export function PortionSlider({
   const notchCount = Math.floor(maxPortion / NOTCH_EVERY)
   const notches = Array.from({ length: notchCount + 1 }, (_, i) => i * NOTCH_EVERY).filter(n => n <= maxPortion)
 
-  // Color based on portion
-  const accentColor = portion === 0 ? '#71717a' : portion <= 40 ? '#4ade80' : portion <= 70 ? '#facc15' : '#d4956a'
+  // Color based on portion (theme-aware via CSS custom properties)
+  const accentColor = portion === 0
+    ? 'rgb(var(--fg-faint))'
+    : portion <= 40
+      ? 'rgb(var(--success))'
+      : portion <= 70
+        ? 'rgb(var(--warning))'
+        : 'rgb(var(--primary))'
 
   return (
     <div className="anim-sheet-up space-y-5">
       {/* Item name */}
       <div className="text-center">
-        <p className="text-xs text-zinc-500 truncate max-w-[220px] mx-auto">{item.name}</p>
-        <p className="text-[10px] text-zinc-600 mt-0.5">{formatCurrency(item.totalPrice)} total</p>
+        <p className="text-xs text-fg-subtle truncate max-w-[220px] mx-auto">{item.name}</p>
+        <p className="text-[10px] text-fg-faint mt-0.5">{formatCurrency(item.totalPrice)} total</p>
       </div>
 
       {/* How this selection should be shared */}
-      <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-1 p-1.5 border border-border">
+      <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface p-1.5 border border-line">
         <button
           type="button"
           onClick={() => setShareMode('equal')}
           className={`relative rounded-lg px-3 py-3 text-left border transition-all ${
             shareMode === 'equal'
-              ? 'bg-brand/15 border-brand/40 text-white'
-              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              ? 'bg-primary/15 border-primary/40 text-fg'
+              : 'border-transparent text-fg-subtle hover:text-fg-muted'
           }`}
         >
           <div className="flex items-center gap-2">
-            <Scale size={14} className={shareMode === 'equal' ? 'text-brand' : ''} />
+            <Scale size={14} className={shareMode === 'equal' ? 'text-primary' : ''} />
             <span className="text-xs font-semibold">Split equally</span>
-            {shareMode === 'equal' && <Check size={12} className="ml-auto text-brand" />}
+            {shareMode === 'equal' && <Check size={12} className="ml-auto text-primary" />}
           </div>
-          <p className="text-[10px] leading-relaxed text-zinc-500 mt-1.5">
+          <p className="text-[10px] leading-relaxed text-fg-subtle mt-1.5">
             Share equally with everyone who selects this item.
           </p>
         </button>
@@ -116,25 +122,25 @@ export function PortionSlider({
           onClick={() => setShareMode('custom')}
           className={`relative rounded-lg px-3 py-3 text-left border transition-all ${
             shareMode === 'custom'
-              ? 'bg-brand/15 border-brand/40 text-white'
-              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              ? 'bg-primary/15 border-primary/40 text-fg'
+              : 'border-transparent text-fg-subtle hover:text-fg-muted'
           }`}
         >
           <div className="flex items-center gap-2">
-            <SlidersHorizontal size={14} className={shareMode === 'custom' ? 'text-brand' : ''} />
+            <SlidersHorizontal size={14} className={shareMode === 'custom' ? 'text-primary' : ''} />
             <span className="text-xs font-semibold">Set my portion</span>
-            {shareMode === 'custom' && <Check size={12} className="ml-auto text-brand" />}
+            {shareMode === 'custom' && <Check size={12} className="ml-auto text-primary" />}
           </div>
-          <p className="text-[10px] leading-relaxed text-zinc-500 mt-1.5">
+          <p className="text-[10px] leading-relaxed text-fg-subtle mt-1.5">
             Enter the amount or percentage you consumed.
           </p>
         </button>
       </div>
 
       {shareMode === 'equal' ? (
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] px-4 py-4 text-center">
-          <p className="text-sm font-semibold text-emerald-300">No percentage needed</p>
-          <p className="text-xs leading-relaxed text-zinc-500 mt-1">
+        <div className="rounded-xl border border-success/20 bg-success/[0.07] px-4 py-4 text-center">
+          <p className="text-sm font-semibold text-success">No percentage needed</p>
+          <p className="text-xs leading-relaxed text-fg-subtle mt-1">
             Your share will adjust automatically as other people select or leave this item.
           </p>
         </div>
@@ -149,23 +155,23 @@ export function PortionSlider({
             >
               {formatPercentage(portion)}%
             </div>
-            <p className="text-sm text-zinc-400 mt-1.5">
-              = <span className="text-white font-semibold">{formatCurrency(amount)}</span>
+            <p className="text-sm text-fg-muted mt-1.5">
+              = <span className="text-fg font-semibold">{formatCurrency(amount)}</span>
             </p>
             {remaining > 0 && remaining < maxPortion && (
-              <p className="text-xs text-zinc-600 mt-1">{remaining}% unallocated</p>
+              <p className="text-xs text-fg-faint mt-1">{remaining}% unallocated</p>
             )}
           </div>
 
           {/* Absolute amount entry */}
-          <div className="bg-surface-2 border border-border rounded-xl p-3 space-y-2">
+          <div className="bg-surface-raised border border-line rounded-xl p-3 space-y-2">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-medium text-zinc-300">Enter your amount</p>
-                <p className="text-[10px] text-zinc-600 mt-0.5">Percentage is calculated automatically</p>
+                <p className="text-xs font-medium text-fg-muted">Enter your amount</p>
+                <p className="text-[10px] text-fg-faint mt-0.5">Percentage is calculated automatically</p>
               </div>
               <div className="relative w-32">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">₹</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-fg-subtle">₹</span>
                 <input
                   type="number"
                   min={0}
@@ -176,12 +182,12 @@ export function PortionSlider({
                   onFocus={(event) => event.currentTarget.select()}
                   onChange={(event) => setAbsoluteAmount(event.target.value)}
                   onBlur={() => setAmountInput(amountInputValue(amount))}
-                  className="w-full bg-surface-1 border border-border rounded-lg pl-7 pr-2 py-2 text-sm text-white text-right focus:outline-none focus:border-brand/60"
+                  className="w-full bg-surface border border-line rounded-lg pl-7 pr-2 py-2 text-sm text-fg text-right focus:outline-none focus:border-primary/60"
                   aria-label="Your absolute amount for this item"
                 />
               </div>
             </div>
-            <p className="text-[10px] text-zinc-500 text-right">
+            <p className="text-[10px] text-fg-subtle text-right">
               {amountInput || '0'} of {formatCurrency(item.totalPrice)} = {formatPercentage(portion)}%
             </p>
           </div>
@@ -198,16 +204,16 @@ export function PortionSlider({
             return (
               <div
                 key={sel.userId}
-                className="flex items-center gap-1.5 bg-surface-2 border border-border rounded-full px-2.5 py-1"
+                className="flex items-center gap-1.5 bg-surface-raised border border-line rounded-full px-2.5 py-1"
               >
-                <div className="w-4 h-4 rounded-full bg-surface-3 flex items-center justify-center text-[9px] font-bold text-zinc-300">
+                <div className="w-4 h-4 rounded-full bg-surface-overlay flex items-center justify-center text-[9px] font-bold text-fg-muted">
                   {user.name[0]?.toUpperCase()}
                 </div>
-                <span className="text-xs text-zinc-400">{user.name.split(' ')[0]}</span>
+                <span className="text-xs text-fg-muted">{user.name.split(' ')[0]}</span>
                 <span className="text-xs font-medium" style={{ color: accentColor }}>
                   {sel.portionPercentage === 100 ? 'Equal share' : `${sel.portionPercentage}%`}
                 </span>
-                {isLocked && <Lock size={9} className="text-zinc-500" />}
+                {isLocked && <Lock size={9} className="text-fg-subtle" />}
               </div>
             )
           })}
@@ -228,7 +234,7 @@ export function PortionSlider({
                 className="w-px transition-colors"
                 style={{
                   height: n % 25 === 0 ? '8px' : '4px',
-                  background: n <= portion ? accentColor : '#3f3f46',
+                  background: n <= portion ? accentColor : 'rgb(var(--line-strong))',
                   opacity: n % 25 === 0 ? 1 : 0.5,
                 }}
               />
@@ -246,11 +252,11 @@ export function PortionSlider({
           onChange={(e) => setPortionAnimated(parseInt(e.target.value))}
           className="slider-brand w-full"
           style={{
-            background: `linear-gradient(to right, ${accentColor} ${(portion / maxPortion) * 100}%, #27272a ${(portion / maxPortion) * 100}%)`,
+            background: `linear-gradient(to right, ${accentColor} ${(portion / maxPortion) * 100}%, rgb(var(--surface-overlay)) ${(portion / maxPortion) * 100}%)`,
           }}
         />
 
-        <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
+        <div className="flex justify-between text-[10px] text-fg-faint mt-1">
           <span>0%</span>
           <span>{maxPortion}%</span>
         </div>
@@ -258,7 +264,7 @@ export function PortionSlider({
 
       {/* Presets */}
       {shareMode === 'custom' && <div>
-        <p className="text-[10px] font-medium text-zinc-600 uppercase tracking-wider mb-2">Quick select</p>
+        <p className="text-[10px] font-medium text-fg-faint uppercase tracking-wider mb-2">Quick select</p>
         <div className="flex flex-wrap gap-1.5">
           {presets.map((p) => (
             <button
@@ -266,10 +272,10 @@ export function PortionSlider({
               onClick={() => setPortionAnimated(p)}
               className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
                 portion === p
-                  ? 'border-brand/50 text-brand font-semibold'
-                  : 'bg-surface-2 border-border text-zinc-500 hover:text-white'
+                  ? 'border-primary/50 text-primary font-semibold'
+                  : 'bg-surface-raised border-line text-fg-subtle hover:text-fg'
               }`}
-              style={portion === p ? { background: `${accentColor}18` } : {}}
+              style={portion === p ? { background: 'rgb(var(--primary) / 0.12)' } : {}}
             >
               {p}%
             </button>
@@ -281,15 +287,15 @@ export function PortionSlider({
       <div className="flex gap-3 pt-1">
         <button
           onClick={onCancel}
-          className="flex-1 py-3 bg-surface-2 border border-border rounded-xl text-sm text-zinc-400 hover:text-white transition-all active:scale-95"
+          className="flex-1 py-3 bg-surface-raised border border-line rounded-xl text-sm text-fg-muted hover:text-fg transition-all active:scale-95"
         >
           Cancel
         </button>
         <button
           onClick={() => onConfirm(shareMode === 'equal' ? 100 : portion)}
           disabled={shareMode === 'custom' && portion === 0}
-          className="flex-[2] py-3 rounded-xl text-sm font-semibold text-surface-0 transition-all active:scale-95 disabled:bg-surface-3 disabled:text-zinc-600"
-          style={shareMode === 'equal' || portion > 0 ? { background: '#d4956a' } : {}}
+          className="flex-[2] py-3 rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-95 disabled:bg-surface-overlay disabled:text-fg-faint"
+          style={shareMode === 'equal' || portion > 0 ? { background: 'rgb(var(--primary))' } : {}}
         >
           {shareMode === 'equal' ? 'Split equally' : `Set ${formatPercentage(portion)}%`}
         </button>

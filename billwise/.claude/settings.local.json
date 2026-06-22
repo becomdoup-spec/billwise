@@ -13,7 +13,9 @@
       "Bash(pkill -f \"vite\")",
       "mcp__Claude_in_Chrome__navigate",
       "Bash(npx vite *)",
-      "Bash(kill 30562 30510 35281 35262)"
+      "Bash(kill 30562 30510 35281 35262)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
     ]
   }
 }

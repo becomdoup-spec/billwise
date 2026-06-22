@@ -4,13 +4,29 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#080808" />
+    <meta name="theme-color" content="#090c0e" />
     <meta name="description" content="BillWise — Smart bill splitting for groups" />
     <title>BillWise</title>
     <style>
       * { -webkit-tap-highlight-color: transparent; }
-      body { background: #080808; overscroll-behavior: none; }
+      /* Pre-CSS fallback only — the real theme background lives on
+         <html> via the stylesheet and stays fully theme-reactive. */
+      html { background: #090c0e; }
+      body { overscroll-behavior: none; }
     </style>
+    <script>
+      // Apply the saved/system theme before first paint to avoid a flash
+      // and to keep the <html> class in sync with the theme store.
+      (function () {
+        try {
+          var t = localStorage.getItem('billwise-theme')
+          if (t !== 'light' && t !== 'dark') {
+            t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+          }
+          document.documentElement.classList.toggle('dark', t === 'dark')
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

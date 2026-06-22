@@ -29,18 +29,18 @@ export function UserDashboard() {
     <Layout>
       <Header title="My Bills" subtitle={currentUser?.name} showLogout />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 animate-list">
         {mySessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-surface-2 border border-border flex items-center justify-center mb-4">
-              <Sparkles size={24} className="text-zinc-600" />
+            <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-line flex items-center justify-center mb-4">
+              <Sparkles size={24} className="text-fg-faint" />
             </div>
-            <p className="text-sm font-medium text-zinc-400">No active bills</p>
-            <p className="text-xs text-zinc-600 mt-1">Your admin hasn't shared any bills with you yet</p>
+            <p className="text-sm font-medium text-fg-muted">No active bills</p>
+            <p className="text-xs text-fg-faint mt-1">Your admin hasn't shared any bills with you yet</p>
           </div>
         ) : (
           <>
-            <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Your sessions</p>
+            <p className="text-xs text-fg-subtle font-medium uppercase tracking-wider">Your sessions</p>
             {mySessions.map((session) => {
               const items = billItems[session.id] ?? []
               const participants = users.filter((u) => session.participantIds.includes(u.id))
@@ -71,30 +71,30 @@ export function UserDashboard() {
                 <button
                   key={session.id}
                   onClick={() => navigate(`/session/${session.id}`)}
-                  className="w-full bg-surface-1 border border-border hover:border-border-light rounded-2xl p-4 text-left transition-all group"
+                  className="card-lift w-full bg-surface border border-line hover:border-primary/40 rounded-2xl p-4 text-left shadow-sm hover:shadow-card group"
                 >
                   {/* Header row */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">
+                      <p className="text-sm font-semibold text-fg truncate">
                         {session.restaurantName || 'Unnamed Bill'}
                       </p>
-                      <p className="text-xs text-zinc-500 mt-0.5 font-mono">{session.orderId} · {session.date}</p>
+                      <p className="text-xs text-fg-subtle mt-0.5 font-mono">{session.orderId} · {session.date}</p>
                     </div>
                     <div className="text-right shrink-0">
                       {allLocked && splitDataReady ? (
                         <>
-                          <p className="text-base font-bold text-brand">
+                          <p className="text-base font-bold text-primary">
                             {formatCurrency(mySplit?.grandTotal ?? 0)}
                           </p>
-                          <p className="text-xs text-zinc-500 mt-0.5">your final share</p>
+                          <p className="text-xs text-fg-subtle mt-0.5">your final share</p>
                         </>
                       ) : allLocked ? (
-                        <p className="text-xs text-zinc-500 flex items-center gap-1.5">
-                          <Loader2 size={11} className="animate-spin text-brand" /> Calculating…
+                        <p className="text-xs text-fg-subtle flex items-center gap-1.5">
+                          <Loader2 size={11} className="animate-spin text-primary" /> Calculating…
                         </p>
                       ) : (
-                        <p className="text-xs text-zinc-500">Split pending</p>
+                        <p className="text-xs text-fg-subtle">Split pending</p>
                       )}
                     </div>
                   </div>
@@ -107,13 +107,13 @@ export function UserDashboard() {
                         className={clsx(
                           'flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border',
                           locked
-                            ? 'bg-green-500/10 border-green-500/25 text-green-400'
-                            : 'bg-yellow-500/10 border-yellow-500/25 text-yellow-400',
+                            ? 'bg-success/10 border-success/25 text-success'
+                            : 'bg-warning/10 border-warning/25 text-warning',
                         )}
                       >
                         <div className={clsx(
                           'w-3 h-3 rounded-full flex items-center justify-center text-[8px] font-bold',
-                          locked ? 'bg-green-500/30 text-green-300' : 'bg-yellow-500/20 text-yellow-300',
+                          locked ? 'bg-success/30 text-success' : 'bg-warning/20 text-warning',
                         )}>
                           {user.name[0]?.toUpperCase()}
                         </div>
@@ -129,23 +129,23 @@ export function UserDashboard() {
                   {/* Status line */}
                   <div className="flex items-center gap-2">
                     {isSessionClosed ? (
-                      <span className="flex items-center gap-1 text-xs text-blue-400">
+                      <span className="flex items-center gap-1 text-xs text-info">
                         <Lock size={10} /> Session closed
                       </span>
                     ) : allLocked && splitDataReady ? (
-                      <span className="flex items-center gap-1 text-xs text-green-400">
+                      <span className="flex items-center gap-1 text-xs text-success">
                         <CheckCircle size={10} /> All locked — final split ready
                       </span>
                     ) : allLocked ? (
-                      <span className="flex items-center gap-1 text-xs text-zinc-500">
-                        <Loader2 size={10} className="animate-spin text-brand" /> Loading final split…
+                      <span className="flex items-center gap-1 text-xs text-fg-subtle">
+                        <Loader2 size={10} className="animate-spin text-primary" /> Loading final split…
                       </span>
                     ) : iMeLocked ? (
-                      <span className="flex items-center gap-1 text-xs text-green-400">
+                      <span className="flex items-center gap-1 text-xs text-success">
                         <CheckCircle size={10} /> You're locked · waiting for {participants.length - lockedCount} more
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-xs text-yellow-400">
+                      <span className="flex items-center gap-1 text-xs text-warning">
                         <Clock size={10} /> Choose your items →
                       </span>
                     )}

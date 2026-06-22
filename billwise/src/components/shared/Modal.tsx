@@ -22,17 +22,23 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
   const widths = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg' }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
       />
-      <div className={`relative w-full ${widths[size]} bg-surface-2 rounded-2xl border border-border shadow-2xl animate-slide-up overflow-hidden`}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-base font-semibold text-white">{title}</h2>
+      <div className={`relative w-full ${widths[size]} bg-surface-raised rounded-3xl border border-line shadow-overlay animate-slide-up overflow-hidden`}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+          <h2 className="text-base font-semibold text-fg tracking-tight">{title}</h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-surface-3 transition-colors"
+            aria-label="Close dialog"
+            className="p-1.5 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-overlay transition-colors duration-200"
           >
             <X size={16} />
           </button>

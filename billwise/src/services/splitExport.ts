@@ -81,7 +81,7 @@ export async function downloadSplitImage(session: Session, summaries: UserBillSu
 
   ctx.fillStyle = '#faf9f7'
   ctx.fillRect(0, 0, width, height)
-  ctx.fillStyle = '#d4956a'
+  ctx.fillStyle = '#0d9488'
   ctx.fillRect(0, 0, 18, height)
 
   ctx.fillStyle = '#18181b'
@@ -114,7 +114,7 @@ export async function downloadSplitImage(session: Session, summaries: UserBillSu
       ctx.fillStyle = '#f1f0ee'
       ctx.fillRect(60, y, width - 120, rowHeight)
     }
-    ctx.fillStyle = '#d4956a'
+    ctx.fillStyle = '#0d9488'
     ctx.beginPath()
     ctx.arc(94, y + rowHeight / 2, 20, 0, Math.PI * 2)
     ctx.fill()
@@ -133,7 +133,7 @@ export async function downloadSplitImage(session: Session, summaries: UserBillSu
   })
 
   const groupTotal = summaries.reduce((sum, summary) => sum + summary.grandTotal, 0)
-  ctx.strokeStyle = '#d4956a'
+  ctx.strokeStyle = '#0d9488'
   ctx.lineWidth = 2
   ctx.beginPath()
   ctx.moveTo(60, y + 20)
@@ -143,7 +143,7 @@ export async function downloadSplitImage(session: Session, summaries: UserBillSu
   ctx.font = '700 24px Arial, sans-serif'
   ctx.fillText('Group total', 82, y + 66)
   ctx.textAlign = 'right'
-  ctx.fillStyle = '#b66f42'
+  ctx.fillStyle = '#0f766e'
   ctx.fillText(money(groupTotal), width - 82, y + 66)
 
   if (originalBill) {
@@ -218,7 +218,7 @@ export async function createSplitPdf(
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(12)
     doc.text(summary.userName, MARGIN + 12, y + 7)
-    doc.setTextColor(182, 111, 66)
+    doc.setTextColor(15, 118, 110)
     doc.text(money(summary.grandTotal), PAGE_WIDTH - MARGIN - 12, y + 7, { align: 'right' })
     y += 38
 
@@ -247,14 +247,14 @@ export async function createSplitPdf(
 
   ensureSpace(42)
   const groupTotal = summaries.reduce((sum, summary) => sum + summary.grandTotal, 0)
-  doc.setDrawColor(212, 149, 106)
+  doc.setDrawColor(13, 148, 136)
   doc.line(MARGIN, y, PAGE_WIDTH - MARGIN, y)
   y += 24
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(24, 24, 27)
   doc.setFontSize(12)
   doc.text('Group total', MARGIN, y)
-  doc.setTextColor(182, 111, 66)
+  doc.setTextColor(15, 118, 110)
   doc.text(money(groupTotal), PAGE_WIDTH - MARGIN, y, { align: 'right' })
 
   if (includePageNumbers) addPageNumbers(doc)

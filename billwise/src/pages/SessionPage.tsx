@@ -49,7 +49,7 @@ export function SessionPage() {
   if (!session) return (
     <Layout>
       <Header title="Session not found" back />
-      <div className="flex-1 flex items-center justify-center p-8 text-zinc-500 text-sm">
+      <div className="flex-1 flex items-center justify-center p-8 text-fg-subtle text-sm">
         This session does not exist.
       </div>
     </Layout>
@@ -200,7 +200,7 @@ export function SessionPage() {
                 }
                 navigate('/admin')
               }}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border bg-brand/15 border-brand/30 text-brand hover:bg-brand/25 transition-all"
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border bg-primary/15 border-primary/30 text-primary hover:bg-primary/25 transition-all"
             >
               <CheckCircle size={12} /> Done
             </button>
@@ -209,25 +209,25 @@ export function SessionPage() {
       />
 
       {/* Bill summary bar */}
-      <div className="flex items-center gap-4 px-4 py-3 bg-surface-1 border-b border-border">
+      <div className="flex items-center gap-4 px-4 py-3 bg-surface border-b border-line">
         <div className="flex-1">
-          <p className="text-xs text-zinc-500">Invoice total</p>
-          <p className="text-base font-bold text-brand">{formatCurrency(fixedBillTotal)}</p>
+          <p className="text-xs text-fg-subtle">Invoice total</p>
+          <p className="text-base font-bold text-primary">{formatCurrency(fixedBillTotal)}</p>
           {!isAdmin && (
-            <p className="text-[10px] text-zinc-600 mt-0.5">
+            <p className="text-[10px] text-fg-faint mt-0.5">
               {mySelections.length} item{mySelections.length !== 1 ? 's' : ''} {myLocked ? 'locked' : 'selected'}
             </p>
           )}
         </div>
         <div className="text-right">
-          <p className="text-xs text-zinc-500">{participants.length} people · {selectableItems.length} items</p>
-          <p className="text-xs text-zinc-500 mt-0.5">
+          <p className="text-xs text-fg-subtle">{participants.length} people · {selectableItems.length} items</p>
+          <p className="text-xs text-fg-subtle mt-0.5">
             {lockedCount}/{participants.length} done
           </p>
           {!isAdmin && myLocked && !isSessionLocked && (
             <button
               onClick={handleUnlockMine}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/20 transition-colors"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
             >
               <Lock size={11} /> Unlock selections
             </button>
@@ -236,7 +236,7 @@ export function SessionPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border px-4 gap-1">
+      <div className="flex border-b border-line px-4 gap-1">
         {([
           { id: 'items', label: 'Items', icon: Receipt },
           { id: 'split', label: 'Split', icon: BarChart3 },
@@ -248,8 +248,8 @@ export function SessionPage() {
             className={clsx(
               'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px',
               tab === tid
-                ? 'text-brand border-brand'
-                : 'text-zinc-500 border-transparent hover:text-zinc-300',
+                ? 'text-primary border-primary'
+                : 'text-fg-subtle border-transparent hover:text-fg-muted',
             )}
           >
             <Icon size={13} />
@@ -270,11 +270,11 @@ export function SessionPage() {
               <div className="mx-4 mt-3">
                 <button
                   onClick={() => setExpandCoverage((v) => !v)}
-                  className="w-full flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-2.5"
+                  className="w-full flex items-center gap-2 bg-warning/10 border border-warning/20 rounded-xl px-4 py-2.5"
                 >
-                  <AlertCircle size={14} className="text-yellow-400 shrink-0" />
-                  <span className="text-xs text-yellow-300 flex-1 text-left">Some items have portion coverage issues</span>
-                  {expandCoverage ? <ChevronUp size={14} className="text-yellow-400" /> : <ChevronDown size={14} className="text-yellow-400" />}
+                  <AlertCircle size={14} className="text-warning shrink-0" />
+                  <span className="text-xs text-warning flex-1 text-left">Some items have portion coverage issues</span>
+                  {expandCoverage ? <ChevronUp size={14} className="text-warning" /> : <ChevronDown size={14} className="text-warning" />}
                 </button>
                 {expandCoverage && (
                   <div className="mt-2 space-y-1">
@@ -282,9 +282,9 @@ export function SessionPage() {
                       const cov = coverage[item.id] ?? 0
                       if (cov === 0 || (cov >= 99.99 && cov <= 100.01)) return null
                       return (
-                        <div key={item.id} className="flex items-center justify-between bg-surface-1 rounded-lg px-3 py-2 text-xs">
-                          <span className="text-zinc-300 truncate flex-1">{item.name}</span>
-                          <span className={clsx('ml-2 font-medium', cov > 100.01 ? 'text-red-400' : 'text-yellow-400')}>
+                        <div key={item.id} className="flex items-center justify-between bg-surface rounded-lg px-3 py-2 text-xs">
+                          <span className="text-fg-muted truncate flex-1">{item.name}</span>
+                          <span className={clsx('ml-2 font-medium', cov > 100.01 ? 'text-danger' : 'text-warning')}>
                             {cov}% claimed
                           </span>
                         </div>
@@ -300,14 +300,14 @@ export function SessionPage() {
               <div className={clsx(
                 'mx-4 mt-3 rounded-xl border px-4 py-3 flex items-center gap-3',
                 editingUser
-                  ? 'bg-brand/10 border-brand/30'
-                  : 'bg-surface-1 border-border',
+                  ? 'bg-primary/10 border-primary/30'
+                  : 'bg-surface border-line',
               )}>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-white">
+                  <p className="text-xs font-semibold text-fg">
                     {editingUser ? `Editing ${editingUser.name}'s selections` : 'Member selection editor'}
                   </p>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">
+                  <p className="text-[10px] text-fg-subtle mt-0.5">
                     {editingUser
                       ? `${activeSelections.length} selected · changes save instantly`
                       : 'All menu items below are shared automatically with the selected participants.'}
@@ -316,14 +316,14 @@ export function SessionPage() {
                 {editingUser && (
                   <button
                     onClick={() => { setEditingUserId(''); setTab('people') }}
-                    className="text-xs text-brand hover:text-brand-light transition-colors"
+                    className="text-xs text-primary hover:text-primary-hover transition-colors"
                   >
                     Done editing
                   </button>
                 )}
               </div>
             )}
-            <div className="mt-3 bg-surface-1 border-y border-border divide-y divide-border">
+            <div className="mt-3 bg-surface border-y border-line divide-y divide-line animate-list">
               {visibleItems.map((item) => {
                 const mySelection = sessionSelections.find(
                   (s) => s.itemId === item.id && s.userId === selectionUserId,
@@ -374,8 +374,8 @@ export function SessionPage() {
 
               {visibleItems.length === 0 && (
                 <div className="py-12 text-center">
-                  <Receipt size={24} className="text-zinc-700 mx-auto mb-2" />
-                  <p className="text-xs text-zinc-500">
+                  <Receipt size={24} className="text-fg-faint mx-auto mb-2" />
+                  <p className="text-xs text-fg-subtle">
                     No items on this bill
                   </p>
                 </div>
@@ -383,10 +383,10 @@ export function SessionPage() {
             </div>
 
             {sharedChargesTotal > 0 && (
-              <div className="mx-4 mt-3 flex items-start gap-2 bg-surface-1 border border-border rounded-xl px-4 py-3">
+              <div className="mx-4 mt-3 flex items-start gap-2 bg-surface border border-line rounded-xl px-4 py-3">
                 <div className="flex-1">
-                  <p className="text-xs text-zinc-500 font-medium">Shared bill charges</p>
-                  <p className="text-xs text-zinc-600 mt-0.5">
+                  <p className="text-xs text-fg-subtle font-medium">Shared bill charges</p>
+                  <p className="text-xs text-fg-faint mt-0.5">
                     Staff contribution, tax, and rounding ({formatCurrency(sharedChargesTotal)}) are split equally among {participants.length} people = {formatCurrency(sharedChargesPerPerson)} each
                   </p>
                 </div>
@@ -396,9 +396,9 @@ export function SessionPage() {
             {!isAdmin && hasBillImage && (
               <button
                 onClick={handleViewBillImage}
-                className="mx-4 mt-3 w-[calc(100%_-_2rem)] flex items-center justify-center gap-2 bg-surface-1 border border-border hover:border-brand/30 rounded-xl px-4 py-3 text-xs font-medium text-zinc-400 hover:text-white transition-all"
+                className="mx-4 mt-3 w-[calc(100%_-_2rem)] flex items-center justify-center gap-2 bg-surface border border-line hover:border-primary/30 rounded-xl px-4 py-3 text-xs font-medium text-fg-muted hover:text-fg transition-all"
               >
-                <FileImage size={14} className="text-brand" /> View original bill
+                <FileImage size={14} className="text-primary" /> View original bill
               </button>
             )}
           </div>
@@ -408,11 +408,11 @@ export function SessionPage() {
         {tab === 'split' && (
           <div className="p-4 space-y-4">
             {/* Live lock status */}
-            <div className="bg-surface-1 border border-border rounded-2xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-                <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Who's locked in</p>
+            <div className="bg-surface border border-line rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+                <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Who's locked in</p>
                 {allParticipantsLocked && (
-                  <span className="text-[10px] text-green-400 font-semibold flex items-center gap-1">
+                  <span className="text-[10px] text-success font-semibold flex items-center gap-1">
                     <CheckCircle size={10} /> All done
                   </span>
                 )}
@@ -424,13 +424,13 @@ export function SessionPage() {
                     className={clsx(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all',
                       locked
-                        ? 'bg-green-500/10 border-green-500/25 text-green-300'
-                        : 'bg-yellow-500/10 border-yellow-500/25 text-yellow-300',
+                        ? 'bg-success/10 border-success/25 text-success'
+                        : 'bg-warning/10 border-warning/25 text-warning',
                     )}
                   >
                     <div className={clsx(
                       'w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold',
-                      locked ? 'bg-green-500/30 text-green-200' : 'bg-yellow-500/20 text-yellow-300',
+                      locked ? 'bg-success/30 text-success' : 'bg-warning/20 text-warning',
                     )}>
                       {user.name[0]?.toUpperCase()}
                     </div>
@@ -442,24 +442,24 @@ export function SessionPage() {
                   </div>
                 ))}
                 {participants.length === 0 && (
-                  <p className="text-xs text-zinc-600 py-1">No participants yet</p>
+                  <p className="text-xs text-fg-faint py-1">No participants yet</p>
                 )}
               </div>
             </div>
 
             {/* Final split — only when everyone locked */}
             {allParticipantsLocked ? (
-              <div className="animate-fade-in space-y-3">
+              <div className="animate-fade-in space-y-3 animate-list">
                 <div className="flex items-center justify-between gap-3 px-1">
                   <div className="flex items-center gap-2">
-                    <Sparkles size={14} className="text-brand" />
-                    <p className="text-sm font-semibold text-white">Final Split</p>
+                    <Sparkles size={14} className="text-primary" />
+                    <p className="text-sm font-semibold text-fg">Final Split</p>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={exportImage}
                       disabled={Boolean(exporting)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface-1 text-[11px] text-zinc-400 hover:text-white hover:border-brand/30 disabled:opacity-50 transition-all"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-surface text-[11px] text-fg-muted hover:text-fg hover:border-primary/30 disabled:opacity-50 transition-all"
                     >
                       {exporting === 'image'
                         ? <Loader2 size={11} className="animate-spin" />
@@ -469,7 +469,7 @@ export function SessionPage() {
                     <button
                       onClick={exportPdf}
                       disabled={Boolean(exporting)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface-1 text-[11px] text-zinc-400 hover:text-white hover:border-brand/30 disabled:opacity-50 transition-all"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-surface text-[11px] text-fg-muted hover:text-fg hover:border-primary/30 disabled:opacity-50 transition-all"
                     >
                       {exporting === 'pdf'
                         ? <Loader2 size={11} className="animate-spin" />
@@ -486,39 +486,39 @@ export function SessionPage() {
                       className={clsx(
                         'rounded-2xl border p-4 space-y-2 transition-all',
                         isMe
-                          ? 'bg-brand/10 border-brand/30'
-                          : 'bg-surface-1 border-border',
+                          ? 'bg-primary/10 border-primary/30'
+                          : 'bg-surface border-line',
                       )}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className={clsx(
                             'w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold',
-                            isMe ? 'bg-brand/25 text-brand' : 'bg-surface-3 text-zinc-300',
+                            isMe ? 'bg-primary/25 text-primary' : 'bg-surface-overlay text-fg-muted',
                           )}>
                             {s.userName[0]?.toUpperCase()}
                           </div>
-                          <span className="text-sm font-semibold text-white">
+                          <span className="text-sm font-semibold text-fg">
                             {isMe ? `You (${s.userName})` : s.userName}
                           </span>
                         </div>
-                        <span className={clsx('text-lg font-bold', isMe ? 'text-brand' : 'text-white')}>
+                        <span className={clsx('text-lg font-bold', isMe ? 'text-primary' : 'text-fg')}>
                           {formatCurrency(s.grandTotal)}
                         </span>
                       </div>
-                      <div className="space-y-1 pt-1 border-t border-border/50">
+                      <div className="space-y-1 pt-1 border-t border-line/50">
                         {s.itemBreakdown.map(({ item, portionPercentage, amount }) => (
-                          <div key={item.id} className="flex justify-between text-xs text-zinc-400">
+                          <div key={item.id} className="flex justify-between text-xs text-fg-muted">
                             <span className="truncate flex-1">
                               {item.name}
                               {portionPercentage < 100 && (
-                                <span className="text-zinc-600 ml-1">({portionPercentage}%)</span>
+                                <span className="text-fg-faint ml-1">({portionPercentage}%)</span>
                               )}
                             </span>
                             <span className="shrink-0 ml-2">{formatCurrency(amount)}</span>
                           </div>
                         ))}
-                        <div className="flex justify-between text-xs text-zinc-500 pt-1">
+                        <div className="flex justify-between text-xs text-fg-subtle pt-1">
                           <span>Shared bill charges</span>
                           <span>{formatCurrency(s.cgstShare + s.sgstShare + s.additionalChargesShare)}</span>
                         </div>
@@ -528,10 +528,10 @@ export function SessionPage() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-8 bg-surface-1 border border-border rounded-2xl">
-                <Clock size={20} className="text-zinc-600 mx-auto mb-2" />
-                <p className="text-sm font-medium text-zinc-400">Waiting for everyone to lock</p>
-                <p className="text-xs text-zinc-600 mt-1">
+              <div className="text-center py-8 bg-surface border border-line rounded-2xl">
+                <Clock size={20} className="text-fg-faint mx-auto mb-2" />
+                <p className="text-sm font-medium text-fg-muted">Waiting for everyone to lock</p>
+                <p className="text-xs text-fg-faint mt-1">
                   {lockStatus.filter(x => x.locked).length}/{participants.length} locked in
                 </p>
               </div>
@@ -541,38 +541,38 @@ export function SessionPage() {
 
         {/* People tab */}
         {tab === 'people' && (
-          <div className="p-4 space-y-3">
-            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Participants ({participants.length})</p>
+          <div className="p-4 space-y-3 animate-list">
+            <p className="text-xs font-medium text-fg-subtle uppercase tracking-wider">Participants ({participants.length})</p>
             {participants.map((user) => {
               const userSels = sessionSelections.filter((s) => s.userId === user.id)
               const isUserLocked = (session.lockedParticipantIds ?? []).includes(user.id)
               const userSplit = splits.find((s) => s.userId === user.id)
 
               return (
-                <div key={user.id} className="flex items-center gap-3 bg-surface-1 border border-border rounded-xl px-4 py-3">
-                  <div className="w-9 h-9 rounded-lg bg-surface-3 flex items-center justify-center text-sm font-bold text-zinc-300 shrink-0">
+                <div key={user.id} className="flex items-center gap-3 bg-surface border border-line rounded-xl px-4 py-3">
+                  <div className="w-9 h-9 rounded-lg bg-surface-overlay flex items-center justify-center text-sm font-bold text-fg-muted shrink-0">
                     {user.name[0]?.toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                      <p className="text-sm font-semibold text-fg truncate">{user.name}</p>
                       <span className={clsx(
                         'text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0',
                         isUserLocked
-                          ? 'bg-green-500/10 border-green-500/25 text-green-400'
-                          : 'bg-yellow-500/10 border-yellow-500/25 text-yellow-400',
+                          ? 'bg-success/10 border-success/25 text-success'
+                          : 'bg-warning/10 border-warning/25 text-warning',
                       )}>
                         {isUserLocked ? 'Done' : 'Pending'}
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-500 mt-0.5">
+                    <p className="text-xs text-fg-subtle mt-0.5">
                       {userSels.length} item{userSels.length !== 1 ? 's' : ''} selected
                       {isUserLocked ? ' · locked' : ''}
                     </p>
                     {isAdmin && (
                       <button
                         onClick={() => { setEditingUserId(user.id); setTab('items') }}
-                        className="mt-1.5 flex items-center gap-1 text-xs text-brand hover:text-brand-light transition-colors"
+                        className="mt-1.5 flex items-center gap-1 text-xs text-primary hover:text-primary-hover transition-colors"
                       >
                         <Pencil size={10} /> View / edit selections
                       </button>
@@ -580,7 +580,7 @@ export function SessionPage() {
                   </div>
                   <div className="text-right">
                     {isAdmin && (
-                      <p className="text-sm font-bold text-brand">
+                      <p className="text-sm font-bold text-primary">
                         {formatCurrency(userSplit?.grandTotal ?? 0)}
                       </p>
                     )}
@@ -602,8 +602,8 @@ export function SessionPage() {
                         className={clsx(
                           'text-xs mt-1 transition-colors',
                           isUserLocked
-                            ? 'text-green-500 hover:text-green-300'
-                            : 'text-yellow-500 hover:text-yellow-300',
+                            ? 'text-success hover:text-success'
+                            : 'text-warning hover:text-warning',
                         )}
                       >
                         {isUserLocked ? 'Mark pending' : 'Mark done'}
@@ -620,7 +620,7 @@ export function SessionPage() {
                           toast.error(`${user.name} could not be removed`)
                         }
                       }}
-                      className="p-1.5 text-zinc-600 hover:text-red-400 transition-colors"
+                      className="p-1.5 text-fg-faint hover:text-danger transition-colors"
                     >
                       <UserMinus size={14} />
                     </button>
@@ -631,7 +631,7 @@ export function SessionPage() {
 
             {isAdmin && nonParticipants.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-zinc-600 uppercase tracking-wider mb-2 mt-4">Add to session</p>
+                <p className="text-xs font-medium text-fg-faint uppercase tracking-wider mb-2 mt-4">Add to session</p>
                 {nonParticipants.map((user) => (
                   <button
                     key={user.id}
@@ -643,13 +643,13 @@ export function SessionPage() {
                         toast.error(`${user.name} could not be added`)
                       }
                     }}
-                    className="w-full flex items-center gap-3 bg-surface-1 border border-border border-dashed hover:border-brand/30 rounded-xl px-4 py-3 mb-2 transition-all"
+                    className="w-full flex items-center gap-3 bg-surface border border-line border-dashed hover:border-primary/30 rounded-xl px-4 py-3 mb-2 transition-all"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-surface-3 flex items-center justify-center text-xs font-bold text-zinc-500">
+                    <div className="w-8 h-8 rounded-lg bg-surface-overlay flex items-center justify-center text-xs font-bold text-fg-subtle">
                       {user.name[0]?.toUpperCase()}
                     </div>
-                    <span className="text-sm text-zinc-500 flex-1 text-left">{user.name}</span>
-                    <UserPlus size={14} className="text-zinc-600" />
+                    <span className="text-sm text-fg-subtle flex-1 text-left">{user.name}</span>
+                    <UserPlus size={14} className="text-fg-faint" />
                   </button>
                 ))}
               </div>
@@ -660,15 +660,15 @@ export function SessionPage() {
 
       {/* Bottom action bar */}
       {!isAdmin && !isSessionLocked && tab === 'items' && !myLocked && (
-        <div className="border-t border-border bg-surface-0/95 backdrop-blur-sm px-4 py-3 pb-safe">
+        <div className="border-t border-line bg-canvas/95 backdrop-blur-sm px-4 py-3 pb-safe">
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-zinc-500">
+            <div className="flex items-center justify-between text-xs text-fg-subtle">
               <span>{mySelections.length} item{mySelections.length !== 1 ? 's' : ''} selected</span>
               <span>Review before locking</span>
             </div>
             <button
               onClick={handleLockMine}
-              className="w-full py-3 bg-brand hover:bg-brand-light rounded-xl text-sm font-semibold text-surface-0 transition-all active:scale-98"
+              className="w-full py-3 bg-primary hover:bg-primary-hover btn-sheen shadow-glow disabled:shadow-none rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-98"
             >
               Lock My Selections
             </button>
@@ -678,10 +678,10 @@ export function SessionPage() {
 
       {/* My total bar when on split tab */}
       {tab === 'split' && !isAdmin && allParticipantsLocked && (
-        <div className="border-t border-border bg-surface-0/95 backdrop-blur-sm px-4 py-4 pb-safe">
+        <div className="border-t border-line bg-canvas/95 backdrop-blur-sm px-4 py-4 pb-safe">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-zinc-400">Your total</span>
-            <span className="text-xl font-bold text-brand">
+            <span className="text-sm text-fg-muted">Your total</span>
+            <span key={splits.find((s) => s.userId === viewingUserId)?.grandTotal} className="text-xl font-bold text-primary animate-pop">
               {formatCurrency(splits.find((s) => s.userId === viewingUserId)?.grandTotal ?? 0)}
             </span>
           </div>
@@ -691,7 +691,7 @@ export function SessionPage() {
       <Modal open={showBillImage} onClose={() => setShowBillImage(false)} title="Original bill" size="lg">
         {billImageLoading ? (
           <div className="h-72 flex items-center justify-center">
-            <Loader2 size={22} className="animate-spin text-brand" />
+            <Loader2 size={22} className="animate-spin text-primary" />
           </div>
         ) : billImageSrc ? (
           <img
@@ -700,7 +700,7 @@ export function SessionPage() {
             className="w-full max-h-[70vh] object-contain rounded-xl bg-white"
           />
         ) : (
-          <p className="py-12 text-center text-sm text-zinc-500">Bill image unavailable</p>
+          <p className="py-12 text-center text-sm text-fg-subtle">Bill image unavailable</p>
         )}
       </Modal>
     </Layout>

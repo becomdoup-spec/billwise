@@ -33,15 +33,15 @@ export const toast = {
 }
 
 const icons = {
-  success: <CheckCircle size={16} className="text-green-400 shrink-0" />,
-  error: <AlertCircle size={16} className="text-red-400 shrink-0" />,
-  info: <Info size={16} className="text-brand shrink-0" />,
+  success: <CheckCircle size={16} className="text-success shrink-0" />,
+  error: <AlertCircle size={16} className="text-danger shrink-0" />,
+  info: <Info size={16} className="text-primary shrink-0" />,
 }
 
-const borders = {
-  success: 'border-green-500/30',
-  error: 'border-red-500/30',
-  info: 'border-brand/30',
+const accents = {
+  success: 'border-success/30',
+  error: 'border-danger/30',
+  info: 'border-primary/30',
 }
 
 function ToastItem({ toast: t, onRemove }: { toast: Toast; onRemove: () => void }) {
@@ -51,10 +51,13 @@ function ToastItem({ toast: t, onRemove }: { toast: Toast; onRemove: () => void 
   }, [onRemove])
 
   return (
-    <div className={`flex items-start gap-3 bg-surface-3 border ${borders[t.type]} rounded-xl px-4 py-3 shadow-xl animate-slide-up`}>
+    <div
+      role="status"
+      className={`flex items-start gap-3 bg-surface-raised border ${accents[t.type]} rounded-2xl px-4 py-3 shadow-overlay animate-slide-up`}
+    >
       {icons[t.type]}
-      <span className="text-sm text-zinc-200 flex-1 leading-snug">{t.message}</span>
-      <button onClick={onRemove} className="text-zinc-500 hover:text-white transition-colors mt-0.5">
+      <span className="text-sm text-fg flex-1 leading-snug">{t.message}</span>
+      <button onClick={onRemove} aria-label="Dismiss" className="text-fg-faint hover:text-fg transition-colors mt-0.5">
         <X size={14} />
       </button>
     </div>

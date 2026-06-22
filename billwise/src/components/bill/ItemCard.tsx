@@ -160,14 +160,14 @@ export function ItemCard({
         className={clsx(
           'relative flex items-start gap-3 px-4 py-3.5 select-none overflow-hidden transition-all duration-500',
           showSelectionControl ? 'cursor-pointer' : 'cursor-default',
-          'active:bg-surface-3/40',
+          'active:bg-surface-overlay/40',
           allocationComplete
-            ? 'bg-gradient-to-r from-emerald-500/[0.13] via-emerald-500/[0.04] to-transparent anim-allocation-complete'
+            ? 'bg-gradient-to-r from-success/[0.13] via-success/[0.04] to-transparent anim-allocation-complete'
             : allocationOver
-              ? 'bg-gradient-to-r from-red-500/[0.12] to-transparent'
+              ? 'bg-gradient-to-r from-danger/[0.12] to-transparent'
               : allocatedPortion > 0
-                ? 'bg-gradient-to-r from-amber-500/[0.08] to-transparent'
-                : isSelected ? 'bg-brand/5' : 'bg-transparent',
+                ? 'bg-gradient-to-r from-warning/[0.08] to-transparent'
+                : isSelected ? 'bg-primary/5' : 'bg-transparent',
           selectionLocked && !isAdmin && 'opacity-75',
           animClass,
         )}
@@ -176,9 +176,9 @@ export function ItemCard({
         {showSelectionControl && (
           <div className={clsx(
             'mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200',
-            isSelected ? 'bg-brand border-brand scale-110' : 'border-zinc-700 bg-transparent scale-100',
+            isSelected ? 'bg-primary border-primary scale-110' : 'border-line-strong bg-transparent scale-100',
           )}>
-            {isSelected && <Check size={11} strokeWidth={3} className="text-surface-0" />}
+            {isSelected && <Check size={11} strokeWidth={3} className="text-primary-fg" />}
           </div>
         )}
 
@@ -195,25 +195,25 @@ export function ItemCard({
                   onBlur={commitName}
                   onKeyDown={(e) => { if (e.key === 'Enter') commitName(); if (e.key === 'Escape') { setNameVal(item.name); setEditingName(false) } }}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-full bg-surface-3 border border-brand/40 rounded-lg px-2 py-0.5 text-sm text-white outline-none"
+                  className="w-full bg-surface-overlay border border-primary/40 rounded-lg px-2 py-0.5 text-sm text-fg outline-none"
                 />
               ) : (
                 <p
                   className={clsx(
                     'text-sm font-medium truncate',
-                    isSelected ? 'text-white' : 'text-zinc-300',
-                    isAdmin && !isLocked && 'cursor-text hover:text-white',
+                    isSelected ? 'text-fg' : 'text-fg-muted',
+                    isAdmin && !isLocked && 'cursor-text hover:text-fg',
                   )}
                   onDoubleClick={isAdmin && !isLocked ? (e) => { e.stopPropagation(); setEditingName(true) } : undefined}
                 >
                   {item.name}
                   {isAdmin && !isLocked && (
-                    <span className="ml-1 opacity-0 group-hover:opacity-100 text-zinc-700 text-[10px]">✎</span>
+                    <span className="ml-1 opacity-0 group-hover:opacity-100 text-fg-faint text-[10px]">✎</span>
                   )}
                 </p>
               )}
               <div className="flex items-center gap-1.5 mt-0.5">
-                <p className="text-xs text-zinc-600">
+                <p className="text-xs text-fg-faint">
                   {item.quantity > 1
                     ? `${item.quantity} × ${formatCurrency(item.unitPrice)}`
                     : formatCurrency(item.unitPrice)}
@@ -223,14 +223,14 @@ export function ItemCard({
                     <button
                       type="button"
                       onClick={() => onEditQuantity(item.id, Math.max(1, item.quantity - 1))}
-                      className="w-5 h-5 rounded border border-border text-[11px] text-zinc-500 hover:text-white"
+                      className="w-5 h-5 rounded border border-line text-[11px] text-fg-subtle hover:text-fg"
                       aria-label={`Decrease ${item.name} quantity`}
                     >−</button>
-                    <span className="text-[10px] text-zinc-500">Qty {item.quantity}</span>
+                    <span className="text-[10px] text-fg-subtle">Qty {item.quantity}</span>
                     <button
                       type="button"
                       onClick={() => onEditQuantity(item.id, item.quantity + 1)}
-                      className="w-5 h-5 rounded border border-border text-[11px] text-zinc-500 hover:text-white"
+                      className="w-5 h-5 rounded border border-line text-[11px] text-fg-subtle hover:text-fg"
                       aria-label={`Increase ${item.name} quantity`}
                     >+</button>
                   </div>
@@ -247,15 +247,15 @@ export function ItemCard({
                   onBlur={commitPrice}
                   onKeyDown={(e) => { if (e.key === 'Enter') commitPrice(); if (e.key === 'Escape') { setPriceVal(String(item.totalPrice)); setEditingPrice(false) } }}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-20 bg-surface-3 border border-brand/40 rounded-lg px-2 py-0.5 text-sm text-white outline-none text-right"
+                  className="w-20 bg-surface-overlay border border-primary/40 rounded-lg px-2 py-0.5 text-sm text-fg outline-none text-right"
                   inputMode="decimal"
                 />
               ) : (
                 <p
                   className={clsx(
                     'text-sm font-semibold transition-all',
-                    isSelected ? 'text-brand' : 'text-zinc-400',
-                    isAdmin && !isLocked && 'cursor-text hover:text-brand',
+                    isSelected ? 'text-primary' : 'text-fg-muted',
+                    isAdmin && !isLocked && 'cursor-text hover:text-primary',
                   )}
                   onDoubleClick={isAdmin && !isLocked ? (e) => { e.stopPropagation(); setEditingPrice(true) } : undefined}
                 >
@@ -263,7 +263,7 @@ export function ItemCard({
                 </p>
               )}
               {isSplit && isSelected && (
-                <p className="text-[10px] text-zinc-500 mt-0.5 flex items-center gap-1 justify-end">
+                <p className="text-[10px] text-fg-subtle mt-0.5 flex items-center gap-1 justify-end">
                   <Sliders size={8} />
                   {portion}% of {formatCurrency(item.totalPrice)}
                 </p>
@@ -277,10 +277,10 @@ export function ItemCard({
               <span className={clsx(
                 'flex items-center gap-1',
                 allocationComplete
-                  ? 'text-emerald-400'
+                  ? 'text-success'
                   : allocationOver
-                    ? 'text-red-400'
-                    : allocatedPortion > 0 ? 'text-amber-400' : 'text-zinc-600',
+                    ? 'text-danger'
+                    : allocatedPortion > 0 ? 'text-warning' : 'text-fg-faint',
               )}>
                 {allocationComplete
                   ? <CircleCheck size={11} />
@@ -294,16 +294,16 @@ export function ItemCard({
                     : `${displayAllocated}% allocated · ${pendingPortion}% pending`}
               </span>
               {!allocationComplete && !allocationOver && allocatedPortion > 0 && (
-                <span className="text-zinc-600">{formatCurrency(item.totalPrice * pendingPortion / 100)} left</span>
+                <span className="text-fg-faint">{formatCurrency(item.totalPrice * pendingPortion / 100)} left</span>
               )}
             </div>
-            <div className="h-1 rounded-full bg-surface-3/80 overflow-hidden">
+            <div className="h-1 rounded-full bg-surface-overlay/80 overflow-hidden">
               <div
                 className={clsx(
                   'h-full rounded-full transition-all duration-700 ease-out',
                   allocationComplete
-                    ? 'bg-emerald-400'
-                    : allocationOver ? 'bg-red-400' : allocatedPortion > 0 ? 'bg-amber-400' : 'bg-zinc-700',
+                    ? 'bg-success'
+                    : allocationOver ? 'bg-danger' : allocatedPortion > 0 ? 'bg-warning' : 'bg-surface-hover',
                 )}
                 style={{ width: `${progressWidth}%` }}
               />
@@ -334,7 +334,7 @@ export function ItemCard({
                   >
                     {/* Mini avatar */}
                     <div
-                      className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-surface-0 shrink-0"
+                      className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-primary-fg shrink-0"
                       style={{ background: color }}
                     >
                       {user.name[0]?.toUpperCase()}
@@ -356,7 +356,7 @@ export function ItemCard({
 
           {/* Hint when selected and not locked */}
           {selection && !selectionLocked && (
-            <p className="text-[10px] text-zinc-700 leading-none">
+            <p className="text-[10px] text-fg-faint leading-none">
               hold or double-tap to adjust portion
             </p>
           )}

@@ -38,7 +38,7 @@ export function AdminDashboard() {
       <Header title="BillWise Admin" subtitle={currentUser?.name} showLogout />
 
       {/* Tabs */}
-      <div className="flex border-b border-border px-4 gap-1 pt-1">
+      <div className="flex border-b border-line px-4 gap-1 pt-1">
         {([
           { id: 'sessions', label: 'Sessions', icon: Receipt },
           { id: 'users', label: 'Members', icon: Users },
@@ -49,7 +49,7 @@ export function AdminDashboard() {
             onClick={() => setTab(id)}
             className={clsx(
               'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px',
-              tab === id ? 'text-brand border-brand' : 'text-zinc-500 border-transparent hover:text-zinc-300',
+              tab === id ? 'text-primary border-primary' : 'text-fg-subtle border-transparent hover:text-fg-muted',
             )}
           >
             <Icon size={14} />
@@ -64,25 +64,25 @@ export function AdminDashboard() {
             {/* New session CTA */}
             <button
               onClick={() => navigate('/admin/new-session')}
-              className="w-full flex items-center justify-between bg-brand/10 border border-brand/25 hover:border-brand/50 rounded-2xl px-5 py-4 transition-all group"
+              className="card-lift w-full flex items-center justify-between bg-primary/10 border border-primary/25 hover:border-primary/50 rounded-2xl px-5 py-4 group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-brand/20 border border-brand/30 flex items-center justify-center group-hover:bg-brand/30 transition-colors">
-                  <Plus size={18} className="text-brand" />
+                <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+                  <Plus size={18} className="text-primary" />
                 </div>
                 <div className="text-left">
-                  <p className="text-sm font-semibold text-white">New Session</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">Upload a bill to split</p>
+                  <p className="text-sm font-semibold text-fg">New Session</p>
+                  <p className="text-xs text-fg-subtle mt-0.5">Upload a bill to split</p>
                 </div>
               </div>
-              <ChevronRight size={16} className="text-zinc-500 group-hover:text-zinc-300 transition-colors" />
+              <ChevronRight size={16} className="text-fg-subtle group-hover:text-fg-muted transition-colors" />
             </button>
 
             {/* Active sessions */}
             {active.length > 0 && (
               <section>
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Active</p>
-                <div className="space-y-2">
+                <p className="text-xs font-medium text-fg-subtle uppercase tracking-wider mb-2">Active</p>
+                <div className="space-y-2 animate-list">
                   {active.map((s) => (
                     <AdminSessionCard
                       key={s.id}
@@ -100,8 +100,8 @@ export function AdminDashboard() {
             {/* Completed sessions */}
             {completed.length > 0 && (
               <section>
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Completed</p>
-                <div className="space-y-2">
+                <p className="text-xs font-medium text-fg-subtle uppercase tracking-wider mb-2">Completed</p>
+                <div className="space-y-2 animate-list">
                   {completed.map((s) => (
                     <AdminSessionCard
                       key={s.id}
@@ -118,11 +118,11 @@ export function AdminDashboard() {
 
             {sessions.length === 0 && (
               <div className="text-center py-12">
-                <div className="w-16 h-16 rounded-2xl bg-surface-2 border border-border flex items-center justify-center mx-auto mb-4">
-                  <Sparkles size={24} className="text-zinc-600" />
+                <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-line flex items-center justify-center mx-auto mb-4">
+                  <Sparkles size={24} className="text-fg-faint" />
                 </div>
-                <p className="text-sm font-medium text-zinc-400">No sessions yet</p>
-                <p className="text-xs text-zinc-600 mt-1">Create one by uploading a bill</p>
+                <p className="text-sm font-medium text-fg-muted">No sessions yet</p>
+                <p className="text-xs text-fg-faint mt-1">Create one by uploading a bill</p>
               </div>
             )}
           </div>
@@ -134,31 +134,31 @@ export function AdminDashboard() {
 
         {tab === 'settings' && (
           <div className="p-4 space-y-4">
-            <div className="bg-surface-1 rounded-2xl border border-border overflow-hidden">
-              <div className="px-4 py-3 border-b border-border">
-                <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Bill OCR</p>
+            <div className="bg-surface rounded-2xl border border-line overflow-hidden">
+              <div className="px-4 py-3 border-b border-line">
+                <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Bill OCR</p>
               </div>
               <div className="p-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full bg-green-400 mt-1.5 shrink-0" />
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Bills are read using <span className="text-white">Tesseract OCR</span> — runs entirely on your device.
+                  <div className="w-2 h-2 rounded-full bg-success mt-1.5 shrink-0" />
+                  <p className="text-xs text-fg-muted leading-relaxed">
+                    Bills are read using <span className="text-fg">Tesseract OCR</span> — runs entirely on your device.
                     No internet connection, no API key, and no data ever leaves your phone or browser.
                   </p>
                 </div>
               </div>
             </div>
             <AdminPasswordSettings />
-            <div className="bg-surface-1 rounded-2xl border border-border p-4">
-              <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-3">App Info</p>
+            <div className="bg-surface rounded-2xl border border-line p-4">
+              <p className="text-xs font-medium text-fg-muted uppercase tracking-wider mb-3">App Info</p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-zinc-500">Version</span>
-                  <span className="text-zinc-300">1.0.0</span>
+                  <span className="text-fg-subtle">Version</span>
+                  <span className="text-fg-muted">1.0.0</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-zinc-500">Sessions</span>
-                  <span className="text-zinc-300">{sessions.length}</span>
+                  <span className="text-fg-subtle">Sessions</span>
+                  <span className="text-fg-muted">{sessions.length}</span>
                 </div>
               </div>
             </div>
@@ -172,13 +172,13 @@ export function AdminDashboard() {
         title="Delete session"
         size="sm"
       >
-        <p className="text-sm text-zinc-400 leading-relaxed">
-          Delete <strong className="text-white">{sessionToDelete?.restaurantName || 'this session'}</strong> and all of its bill items and selections? This cannot be undone.
+        <p className="text-sm text-fg-muted leading-relaxed">
+          Delete <strong className="text-fg">{sessionToDelete?.restaurantName || 'this session'}</strong> and all of its bill items and selections? This cannot be undone.
         </p>
         <div className="flex gap-2 mt-5">
           <button
             onClick={() => setSessionToDelete(null)}
-            className="flex-1 py-2.5 rounded-xl border border-border text-sm text-zinc-300 hover:bg-surface-3 transition-colors"
+            className="flex-1 py-2.5 rounded-xl border border-line text-sm text-fg-muted hover:bg-surface-overlay transition-colors"
           >
             Cancel
           </button>
@@ -193,7 +193,7 @@ export function AdminDashboard() {
                 toast.error('Session could not be deleted from the database')
               }
             }}
-            className="flex-1 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/25 transition-colors"
+            className="flex-1 py-2.5 rounded-xl bg-danger/15 border border-danger/30 text-sm font-medium text-danger hover:bg-danger/25 transition-colors"
           >
             Delete session
           </button>
@@ -242,14 +242,14 @@ function AdminPasswordSettings() {
       value={value}
       onChange={(event) => onChange(event.target.value.replace(/\D/g, '').slice(0, 4))}
       placeholder={placeholder}
-      className="w-full bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-brand/60 font-mono tracking-widest"
+      className="w-full bg-surface-raised border border-line rounded-xl px-4 py-3 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60 font-mono tracking-widest"
     />
   )
 
   return (
-    <div className="bg-surface-1 rounded-2xl border border-border overflow-hidden">
-      <div className="px-4 py-3 border-b border-border">
-        <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Security · My Admin PIN</p>
+    <div className="bg-surface rounded-2xl border border-line overflow-hidden">
+      <div className="px-4 py-3 border-b border-line">
+        <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Security · My Admin PIN</p>
       </div>
       <div className="p-4 space-y-3">
         {pinInput(currentPin, setCurrentPin, 'Current PIN')}
@@ -258,11 +258,11 @@ function AdminPasswordSettings() {
         <button
           onClick={updatePin}
           disabled={saving}
-          className="w-full py-3 bg-brand hover:bg-brand-light disabled:opacity-60 rounded-xl text-sm font-semibold text-surface-0 transition-all"
+          className="w-full py-3 bg-primary hover:bg-primary-hover btn-sheen shadow-glow disabled:shadow-none disabled:opacity-60 rounded-xl text-sm font-semibold text-primary-fg transition-all"
         >
           {saving ? 'Saving…' : 'Update My PIN'}
         </button>
-        <p className="text-xs text-zinc-600">Other admin and member PINs can be reset from the Members tab.</p>
+        <p className="text-xs text-fg-faint">Other admin and member PINs can be reset from the Members tab.</p>
       </div>
     </div>
   )
@@ -271,9 +271,9 @@ function AdminPasswordSettings() {
 // ── Admin session card with visibility toggle ──────────────────
 
 const statusConfig = {
-  active: { icon: Clock, label: 'Active', className: 'text-yellow-400' },
-  locked: { icon: Clock, label: 'Active', className: 'text-yellow-400' },
-  completed: { icon: CheckCircle, label: 'Done', className: 'text-green-400' },
+  active: { icon: Clock, label: 'Active', className: 'text-warning' },
+  locked: { icon: Clock, label: 'Active', className: 'text-warning' },
+  completed: { icon: CheckCircle, label: 'Done', className: 'text-success' },
 }
 
 function AdminSessionCard({
@@ -295,35 +295,35 @@ function AdminSessionCard({
   const allLocked = participants.length > 0 && lockedCount === participants.length
 
   return (
-    <div className="bg-surface-1 border border-border rounded-xl overflow-hidden">
+    <div className="card-lift bg-surface border border-line hover:border-primary/40 rounded-xl overflow-hidden shadow-sm hover:shadow-card">
       {/* Main row — clickable */}
       <button
         onClick={onClick}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-2/50 transition-all group"
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-raised/50 transition-all group"
       >
-        <div className="w-9 h-9 rounded-lg bg-surface-3 border border-border flex items-center justify-center shrink-0">
-          <Receipt size={16} className="text-zinc-400" />
+        <div className="w-9 h-9 rounded-lg bg-surface-overlay border border-line flex items-center justify-center shrink-0">
+          <Receipt size={16} className="text-fg-muted" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white truncate">{session.restaurantName || 'Unnamed Bill'}</p>
+          <p className="text-sm font-semibold text-fg truncate">{session.restaurantName || 'Unnamed Bill'}</p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <StatusIcon size={11} className={cfg.className} />
             <span className={`text-xs ${cfg.className}`}>{cfg.label}</span>
-            <span className="text-xs text-zinc-600">·</span>
-            <span className="text-xs text-zinc-500 font-mono">{session.orderId}</span>
-            <span className="text-xs text-zinc-600">·</span>
-            <span className="text-xs text-zinc-500">{session.date}</span>
+            <span className="text-xs text-fg-faint">·</span>
+            <span className="text-xs text-fg-subtle font-mono">{session.orderId}</span>
+            <span className="text-xs text-fg-faint">·</span>
+            <span className="text-xs text-fg-subtle">{session.date}</span>
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-brand">{formatCurrency(session.totalAmount)}</p>
-          <p className="text-xs text-zinc-500 mt-0.5">{session.participantIds.length} people</p>
+          <p className="text-sm font-bold text-primary">{formatCurrency(session.totalAmount)}</p>
+          <p className="text-xs text-fg-subtle mt-0.5">{session.participantIds.length} people</p>
         </div>
-        <ChevronRight size={14} className="text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />
+        <ChevronRight size={14} className="text-fg-faint group-hover:text-fg-muted transition-colors shrink-0" />
       </button>
 
       {/* Footer bar — lock progress + visibility toggle */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-border/60 bg-surface-0/40">
+      <div className="flex items-center justify-between px-4 py-2 border-t border-line/60 bg-canvas/40">
         {/* Lock progress */}
         <div className="flex items-center gap-2">
           {participants.length > 0 ? (
@@ -338,8 +338,8 @@ function AdminSessionCard({
                       className={clsx(
                         'w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center border',
                         isLocked
-                          ? 'bg-green-500/20 border-green-500/50 text-green-400'
-                          : 'bg-yellow-500/10 border-yellow-500/40 text-yellow-400',
+                          ? 'bg-success/20 border-success/50 text-success'
+                          : 'bg-warning/10 border-warning/40 text-warning',
                       )}
                     >
                       {p.name[0]?.toUpperCase()}
@@ -348,20 +348,20 @@ function AdminSessionCard({
                 })}
               </div>
               {allLocked ? (
-                <span className="text-[10px] text-green-400 font-medium">All locked ✓</span>
+                <span className="text-[10px] text-success font-medium">All locked ✓</span>
               ) : (
-                <span className="text-[10px] text-yellow-400">{lockedCount}/{participants.length} done</span>
+                <span className="text-[10px] text-warning">{lockedCount}/{participants.length} done</span>
               )}
             </>
           ) : (
-            <span className="text-[10px] text-zinc-600">No participants</span>
+            <span className="text-[10px] text-fg-faint">No participants</span>
           )}
         </div>
 
         <div className="flex items-center gap-1.5">
           <button
             onClick={(e) => { e.stopPropagation(); onDelete() }}
-            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-transparent text-zinc-600 hover:text-red-400 hover:border-red-500/25 hover:bg-red-500/10 transition-all"
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-transparent text-fg-faint hover:text-danger hover:border-danger/25 hover:bg-danger/10 transition-all"
             title="Delete session"
           >
             <Trash2 size={10} /> Delete
@@ -371,8 +371,8 @@ function AdminSessionCard({
             className={clsx(
               'flex items-center gap-1.5 text-[10px] font-medium px-2.5 py-1 rounded-full border transition-all',
               session.isPublic
-                ? 'bg-brand/15 border-brand/35 text-brand'
-                : 'bg-surface-3 border-border text-zinc-500 hover:text-zinc-300',
+                ? 'bg-primary/15 border-primary/35 text-primary'
+                : 'bg-surface-overlay border-line text-fg-subtle hover:text-fg-muted',
             )}
           >
             {session.isPublic ? <Eye size={10} /> : <EyeOff size={10} />}
