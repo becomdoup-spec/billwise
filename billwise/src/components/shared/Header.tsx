@@ -1,4 +1,4 @@
-import { ArrowLeft, LogOut } from 'lucide-react'
+import { ArrowLeft, LogOut, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../store/appStore'
 import { ThemeToggle } from './ThemeToggle'
@@ -9,16 +9,25 @@ interface HeaderProps {
   back?: boolean
   onBack?: () => void
   showLogout?: boolean
+  showExit?: boolean
   rightAction?: React.ReactNode
 }
 
-export function Header({ title, subtitle, back, onBack, showLogout, rightAction }: HeaderProps) {
+export function Header({ title, subtitle, back, onBack, showLogout, showExit, rightAction }: HeaderProps) {
   const navigate = useNavigate()
   const { currentUser, setCurrentUser } = useAppStore()
 
   const handleBack = () => {
     if (onBack) { onBack(); return }
     navigate(-1)
+  }
+
+  const handleExit = () => {
+    if (currentUser?.role === 'admin') {
+      navigate('/admin')
+    } else {
+      navigate('/user')
+    }
   }
 
   const handleLogout = () => {
@@ -58,6 +67,16 @@ export function Header({ title, subtitle, back, onBack, showLogout, rightAction 
               <LogOut size={18} />
             </button>
           </div>
+        )}
+        {showExit && (
+          <button
+            onClick={handleExit}
+            aria-label="Exit to dashboard"
+            title="Back to dashboard"
+            className="p-2 rounded-xl text-fg-subtle hover:text-fg hover:bg-surface-overlay transition-all duration-200 active:scale-95"
+          >
+            <X size={20} />
+          </button>
         )}
       </div>
     </header>

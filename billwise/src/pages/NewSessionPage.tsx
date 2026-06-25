@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, UserPlus, X } from 'lucide-react'
+import { Check, UserPlus, X, Loader2 } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
 import { BillUpload } from '../components/admin/BillUpload'
@@ -22,6 +22,7 @@ export function NewSessionPage() {
   const [showAddMember, setShowAddMember] = useState(false)
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberPin, setNewMemberPin] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
 
   const regularUsers = users.filter((u) => u.role === 'user')
 
@@ -43,7 +44,9 @@ export function NewSessionPage() {
       toast.error('Add at least one participant')
       return
     }
+    if (isCreating) return
 
+    setIsCreating(true)
     try {
       const session = await createSession({
         restaurantName: parsedBill.restaurantName,
@@ -71,12 +74,13 @@ export function NewSessionPage() {
       navigate(`/session/${session.id}`)
     } catch {
       toast.error('Session could not be saved. Check the Supabase connection and try again.')
+      setIsCreating(false)
     }
   }
 
   return (
     <Layout>
-      <Header title="New Session" back />
+      <Header title="New Session" back showExit />
 
       {/* Progress steps */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
@@ -217,10 +221,12 @@ export function NewSessionPage() {
 
             <button
               onClick={handleCreate}
-              disabled={selectedUserIds.length === 0}
-              className="w-full py-3.5 bg-primary hover:bg-primary-hover btn-sheen shadow-glow disabled:shadow-none disabled:bg-surface-overlay disabled:text-fg-faint rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-98"
+              disabled={selectedUserIds.length === 0 || isCreating}
+              className="w-full py-3.5 bg-primary hover:bg-primary-hover btn-sheen shadow-glow disabled:shadow-none disabled:bg-surface-overlay disabled:text-fg-faint rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-98 flex items-center justify-center gap-2"
             >
-              Create Session →
+              {isCreating
+                ? <><Loader2 size={15} className="animate-spin" /> Creating session…</>
+                : 'Create Session →'}
             </button>
           </div>
         )}

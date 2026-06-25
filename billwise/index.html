@@ -9,21 +9,22 @@
     <title>BillWise</title>
     <style>
       * { -webkit-tap-highlight-color: transparent; }
-      /* Pre-CSS fallback only — the real theme background lives on
-         <html> via the stylesheet and stays fully theme-reactive. */
-      html { background: #090c0e; }
+      html { background: #f8fafc; }
       body { overscroll-behavior: none; }
+      /* iOS safe-area support */
+      body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
     </style>
     <script>
-      // Apply the saved/system theme before first paint to avoid a flash
-      // and to keep the <html> class in sync with the theme store.
+      // Apply the saved/system theme before first paint to avoid a flash.
+      // Priority: user-saved > admin-default > light (app default)
       (function () {
+        var DARK_THEMES = ['dark','gold','yellow-black','orange-black','blue-dark','aurora']
         try {
           var t = localStorage.getItem('billwise-theme')
-          if (t !== 'light' && t !== 'dark') {
-            t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
-          }
-          document.documentElement.classList.toggle('dark', t === 'dark')
+            || localStorage.getItem('billwise-admin-default-theme')
+            || 'light'
+          document.documentElement.dataset.theme = t
+          document.documentElement.classList.toggle('dark', DARK_THEMES.indexOf(t) !== -1)
         } catch (e) {}
       })()
     </script>

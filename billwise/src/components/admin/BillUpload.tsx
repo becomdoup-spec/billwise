@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import {
-  Image, Loader2, AlertCircle, CheckCircle, Plus, Trash2,
+  Image, AlertCircle, CheckCircle, Plus, Trash2,
   Sparkles, FileText, PencilLine, X, Info,
 } from 'lucide-react'
 import type { ParsedBill } from '../../types'
@@ -9,6 +9,15 @@ import { parseBillWithClaude, type AiProgress } from '../../services/claudeBillP
 import { renderCleanBillImage } from '../../services/billImageRenderer'
 import { formatCurrency, isBillSummaryItemName } from '../../services/calculations'
 import clsx from 'clsx'
+
+// Animated hourglass SVG icon
+function HourglassIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={{ animation: 'hourglass-flip 2s ease-in-out infinite' }}>
+      <path d="M5 2h14M5 22h14M7 2v5l5 5-5 5v5M17 2v5l-5 5 5 5v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 interface BillUploadProps {
   onParsed: (bill: ParsedBill, imageDataUrl?: string) => void
@@ -33,11 +42,31 @@ export function BillUpload({ onParsed }: BillUploadProps) {
   const [state, setState] = useState<UploadState>('idle')
   const [progressLabel, setProgressLabel] = useState('')
   const [progressPct, setProgressPct] = useState(0)
+  const [displayPct, setDisplayPct] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
   const [preview, setPreview] = useState<string>('')
   const [, setParsed] = useState<ParsedBill | null>(null)
   const [editBill, setEditBill] = useState<ParsedBill>(emptyParsedBill())
   const fileRef = useRef<HTMLInputElement>(null)
+  const targetPctRef = useRef(0)
+  const animFrameRef = useRef<number>(0)
+
+  // Smoothly animate displayPct towards progressPct
+  useEffect(() => {
+    targetPctRef.current = progressPct
+    const animate = () => {
+      setDisplayPct((prev) => {
+        const target = targetPctRef.current
+        if (Math.abs(prev - target) < 0.5) return target
+        // Move 8% of the gap per frame — fast at start, slower near target
+        const next = prev + (target - prev) * 0.08
+        animFrameRef.current = requestAnimationFrame(animate)
+        return next
+      })
+    }
+    animFrameRef.current = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(animFrameRef.current)
+  }, [progressPct])
 
   // ── helpers ──────────────────────────────────────────────
   const resetToModeSelect = () => {
@@ -47,6 +76,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     setParsed(null)
     setErrorMsg('')
     setProgressPct(0)
+    setDisplayPct(0)
   }
 
   const validateFile = (file: File): string | null => {
@@ -74,8 +104,8 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     const { dataUrl, base64, mediaType } = await readFileAsDataUrl(file)
     setPreview(dataUrl)
     setState('processing')
-    setProgressLabel('Sending to Claude AI…')
-    setProgressPct(10)
+    setProgressLabel('Preparing image…')
+    setProgressPct(5)
 
     try {
       const result = await parseBillWithClaude(base64, mediaType, (p: AiProgress) => {
@@ -105,18 +135,21 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     const { dataUrl, base64, mediaType } = await readFileAsDataUrl(file)
     setPreview(dataUrl)
     setState('processing')
+    setProgressLabel('Starting OCR engine…')
+    setProgressPct(5)
 
     try {
       const result = await parseBillImage(base64, mediaType, (p: OcrProgress) => {
         const statusLabel: Record<string, string> = {
           'loading tesseract core': 'Loading OCR engine…',
-          'initializing tesseract': 'Initialising…',
+          'initializing tesseract': 'Initialising engine…',
           'loading language traineddata': 'Loading language data…',
-          'initializing api': 'Starting up…',
-          'recognizing text': 'Reading bill…',
+          'initializing api': 'Preparing recognition…',
+          'recognizing text': 'Reading bill text…',
         }
         setProgressLabel(statusLabel[p.status?.toLowerCase() ?? ''] ?? p.status ?? 'Processing…')
-        setProgressPct(Math.round(p.progress * 100))
+        // Ensure progress never goes backwards and always starts from at least 5%
+        setProgressPct((prev) => Math.max(prev, Math.max(5, Math.round(p.progress * 100))))
       })
       setParsed(result)
       setEditBill(result)
@@ -357,31 +390,68 @@ export function BillUpload({ onParsed }: BillUploadProps) {
   // ── PROCESSING (OCR or AI) ───────────────────────────────
   // ════════════════════════════════════════════════════════
   if (state === 'processing') {
+    const pctRounded = Math.round(displayPct)
     return (
       <div className="flex flex-col items-center gap-5 py-8 animate-fade-in">
-        {preview && (
-          <div className="w-24 h-24 rounded-xl overflow-hidden border border-line">
-            <img src={preview} alt="bill" className="w-full h-full object-cover object-top" />
-          </div>
-        )}
-        <div className="w-full space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-fg-muted flex items-center gap-2">
-              <Loader2 size={13} className="animate-spin text-primary" />
-              {progressLabel || 'Processing…'}
-            </span>
-            <span className="text-fg-subtle font-mono">{progressPct}%</span>
-          </div>
-          <div className="h-1.5 bg-surface-overlay rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
-            />
+        {/* Bill thumbnail + hourglass overlay */}
+        <div className="relative">
+          {preview ? (
+            <div className="w-24 h-24 rounded-xl overflow-hidden border border-line">
+              <img src={preview} alt="bill" className="w-full h-full object-cover object-top" />
+            </div>
+          ) : (
+            <div className="w-24 h-24 rounded-xl bg-surface-raised border border-line" />
+          )}
+          {/* Hourglass badge */}
+          <div className="absolute -bottom-3 -right-3 w-9 h-9 rounded-full bg-canvas border-2 border-primary/40 flex items-center justify-center shadow-lg">
+            <HourglassIcon className="w-5 h-5 text-primary" />
           </div>
         </div>
-        <p className="text-xs text-fg-faint text-center">
+
+        <div className="w-full space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-fg-muted font-medium truncate pr-2">
+              {progressLabel || 'Processing…'}
+            </span>
+            <span className="text-primary font-mono font-semibold shrink-0">{pctRounded}%</span>
+          </div>
+          {/* Progress bar with gradient shimmer */}
+          <div className="h-2 bg-surface-overlay rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full relative overflow-hidden"
+              style={{
+                width: `${displayPct}%`,
+                background: 'linear-gradient(90deg, var(--color-primary) 0%, color-mix(in srgb, var(--color-primary) 70%, white) 100%)',
+                transition: 'width 0.05s linear',
+              }}
+            >
+              {/* Shimmer sweep */}
+              <span
+                className="absolute inset-0 opacity-40"
+                style={{
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.5) 50%, transparent 100%)',
+                  animation: 'shimmer 1.4s infinite',
+                }}
+              />
+            </div>
+          </div>
+          {/* Step dots */}
+          <div className="flex justify-between px-0.5 mt-1">
+            {[0, 25, 50, 75, 100].map((mark) => (
+              <div
+                key={mark}
+                className={clsx(
+                  'w-1 h-1 rounded-full transition-all duration-300',
+                  pctRounded >= mark ? 'bg-primary' : 'bg-surface-overlay',
+                )}
+              />
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs text-fg-faint text-center leading-relaxed">
           {mode === 'ai'
-            ? 'AI is formatting your bill…'
+            ? 'AI is reading and formatting your bill…'
             : 'OCR runs entirely on your device · nothing is sent to any server'}
         </p>
       </div>

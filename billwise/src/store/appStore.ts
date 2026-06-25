@@ -8,6 +8,8 @@ import {
   dbUpsertSelection, dbDeleteSelection, dbLockUserSelections, dbUnlockUserSelections,
   dbSetAppSetting,
 } from '../lib/db'
+import { applyAdminDefaultTheme } from './themeStore'
+import type { Theme } from './themeStore'
 import { supabase } from '../lib/supabase'
 
 interface AppStore {
@@ -28,6 +30,9 @@ interface AppStore {
   showCompletedBills: boolean
   setShowCompletedBills: (val: boolean) => Promise<void>
   hydrateShowCompletedBills: (val: boolean) => void
+  defaultTheme: string
+  setDefaultTheme: (theme: string) => Promise<void>
+  hydrateDefaultTheme: (theme: string) => void
 
   // Auth
   currentUser: User | null
@@ -97,6 +102,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       currentUser: null,
       requirePin: true,
       showCompletedBills: true,
+      defaultTheme: 'light',
 
       setRequirePin: async (val) => {
         set({ requirePin: val })
@@ -111,6 +117,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
       },
 
       hydrateShowCompletedBills: (val) => set({ showCompletedBills: val }),
+
+      setDefaultTheme: async (theme) => {
+        set({ defaultTheme: theme })
+        applyAdminDefaultTheme(theme as Theme)
+        await dbSetAppSetting('default_theme', theme)
+      },
+
+      hydrateDefaultTheme: (theme) => {
+        set({ defaultTheme: theme })
+        applyAdminDefaultTheme(theme as Theme)
+      },
 
       setCurrentUser: (user) => set({ currentUser: user }),
 

@@ -195,6 +195,7 @@ export function SessionPage() {
         title={session.restaurantName || 'Unnamed Bill'}
         subtitle={`#${session.orderId} · ${session.date}`}
         back
+        showExit
         rightAction={
           isAdmin ? (
             <button

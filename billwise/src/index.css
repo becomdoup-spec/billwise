@@ -588,3 +588,10 @@ input[type='range'].slider-brand::-moz-range-thumb {
   0%, 100% { opacity: 0.12; }
   50%       { opacity: 0.28; }
 }
+
+@keyframes hourglass-flip {
+  0%   { transform: rotate(0deg); }
+  45%  { transform: rotate(0deg); }
+  55%  { transform: rotate(180deg); }
+  100% { transform: rotate(180deg); }
+}

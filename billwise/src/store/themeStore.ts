@@ -39,18 +39,23 @@ export const THEME_META: Record<Theme, ThemeMeta> = {
   minimal:       { label: 'Minimal',      swatch: '#475569', group: 'special' },
 }
 
-const STORAGE_KEY = 'billwise-theme'
+const USER_THEME_KEY = 'billwise-theme'
+const ADMIN_DEFAULT_THEME_KEY = 'billwise-admin-default-theme'
 
 function isValidTheme(v: string | null): v is Theme {
   return !!v && v in THEME_META
 }
 
 function getInitialTheme(): Theme {
-  if (typeof window === 'undefined') return 'dark'
-  const saved = window.localStorage.getItem(STORAGE_KEY)
-  if (isValidTheme(saved)) return saved
-  const prefersLight = window.matchMedia?.('(prefers-color-scheme: light)').matches
-  return prefersLight ? 'light' : 'dark'
+  if (typeof window === 'undefined') return 'light'
+  // User's own saved preference takes priority
+  const userSaved = window.localStorage.getItem(USER_THEME_KEY)
+  if (isValidTheme(userSaved)) return userSaved
+  // Admin-configured default theme is next
+  const adminDefault = window.localStorage.getItem(ADMIN_DEFAULT_THEME_KEY)
+  if (isValidTheme(adminDefault)) return adminDefault
+  // Fall back to light (not system dark) as app default
+  return 'light'
 }
 
 export function applyTheme(theme: Theme) {
@@ -58,6 +63,18 @@ export function applyTheme(theme: Theme) {
   const el = document.documentElement
   el.dataset.theme = theme
   el.classList.toggle('dark', DARK_THEMES.includes(theme))
+}
+
+/** Called after Supabase hydration — applies admin default to users who haven't set their own theme */
+export function applyAdminDefaultTheme(theme: Theme) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(ADMIN_DEFAULT_THEME_KEY, theme)
+  const userSaved = window.localStorage.getItem(USER_THEME_KEY)
+  if (!isValidTheme(userSaved)) {
+    // User has no personal preference — apply admin default
+    applyTheme(theme)
+    useThemeStore.setState({ theme })
+  }
 }
 
 interface ThemeStore {
@@ -69,7 +86,7 @@ export const useThemeStore = create<ThemeStore>((set) => ({
   theme: getInitialTheme(),
   setTheme: (theme) => {
     applyTheme(theme)
-    window.localStorage.setItem(STORAGE_KEY, theme)
+    window.localStorage.setItem(USER_THEME_KEY, theme)
     set({ theme })
   },
 }))

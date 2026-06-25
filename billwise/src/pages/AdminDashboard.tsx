@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Users, Receipt, Settings, ChevronRight, Clock,
-  CheckCircle, Sparkles, Eye, EyeOff, Trash2, ShieldCheck, ShieldOff,
+  CheckCircle, Sparkles, Eye, EyeOff, Trash2, ShieldCheck, ShieldOff, Palette, Check,
 } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
@@ -10,6 +10,7 @@ import { UserManager } from '../components/admin/UserManager'
 import { Modal } from '../components/shared/Modal'
 import { toast } from '../components/shared/Toast'
 import { useAppStore } from '../store/appStore'
+import { THEME_META, type Theme } from '../store/themeStore'
 import type { Session, User } from '../types'
 import { formatCurrency, hashPin } from '../services/calculations'
 import clsx from 'clsx'
@@ -134,6 +135,7 @@ export function AdminDashboard() {
 
         {tab === 'settings' && (
           <div className="p-4 space-y-4">
+            <DefaultThemePicker />
             <PinRequirementToggle />
             <CompletedBillsToggle />
             <div className="bg-surface rounded-2xl border border-line overflow-hidden">
@@ -202,6 +204,81 @@ export function AdminDashboard() {
         </div>
       </Modal>
     </Layout>
+  )
+}
+
+function DefaultThemePicker() {
+  const { defaultTheme, setDefaultTheme } = useAppStore()
+  const [saving, setSaving] = useState(false)
+
+  const groups: Array<{ label: string; themes: Theme[] }> = [
+    { label: 'Light', themes: (Object.keys(THEME_META) as Theme[]).filter((t) => THEME_META[t].group === 'light') },
+    { label: 'Dark', themes: (Object.keys(THEME_META) as Theme[]).filter((t) => THEME_META[t].group === 'dark') },
+    { label: 'Special', themes: (Object.keys(THEME_META) as Theme[]).filter((t) => THEME_META[t].group === 'special') },
+  ]
+
+  const handleSelect = async (theme: Theme) => {
+    setSaving(true)
+    try {
+      await setDefaultTheme(theme)
+      toast.success(`Default theme set to "${THEME_META[theme].label}" for all members`)
+    } catch {
+      toast.error('Could not save default theme')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-surface rounded-2xl border border-line overflow-hidden">
+      <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+        <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Appearance · Default Theme</p>
+        {saving && <span className="text-[10px] text-fg-faint">Saving…</span>}
+      </div>
+      <div className="p-4 space-y-3">
+        <p className="text-xs text-fg-subtle leading-relaxed">
+          Choose the default colour theme for all members when they first open the app. Members can still override it using the theme toggle.
+        </p>
+        {groups.map(({ label, themes }) => (
+          <div key={label}>
+            <p className="text-[10px] font-medium text-fg-faint uppercase tracking-wider mb-2">{label}</p>
+            <div className="flex flex-wrap gap-2">
+              {themes.map((theme) => {
+                const meta = THEME_META[theme]
+                const isSelected = defaultTheme === theme
+                return (
+                  <button
+                    key={theme}
+                    onClick={() => handleSelect(theme)}
+                    disabled={saving}
+                    title={meta.label}
+                    className={clsx(
+                      'flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all',
+                      isSelected
+                        ? 'bg-primary/15 border-primary/40 text-primary'
+                        : 'bg-surface-overlay border-line text-fg-muted hover:border-line-strong hover:text-fg',
+                    )}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0 border border-white/20"
+                      style={{ background: meta.swatch }}
+                    />
+                    {meta.label}
+                    {isSelected && <Check size={10} />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center gap-2 mt-1">
+          <div className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+          <p className="text-[10px] text-fg-faint">
+            Currently: <span className="text-fg-subtle">{THEME_META[defaultTheme as Theme]?.label ?? defaultTheme}</span>
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 
