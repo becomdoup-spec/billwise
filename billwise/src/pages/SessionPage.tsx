@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useSessionSync } from '../hooks/useSessionSync'
 import {
-  Users, Receipt, BarChart3, Lock, UserPlus, UserMinus,
+  Users, Receipt, BarChart3, Lock, UserPlus, UserMinus, Plus,
   CheckCircle, AlertCircle, ChevronDown, ChevronUp, Clock, Sparkles, FileImage, Loader2, Pencil,
   ImageDown, FileDown,
 } from 'lucide-react'
@@ -30,7 +30,7 @@ export function SessionPage() {
     selections, setSelection, removeSelection,
     lockUserSelections, unlockUserSelections,
     addParticipant, removeParticipant,
-    updateSession, updateBillItem,
+    updateSession, updateBillItem, addBillItem, removeBillItem,
   } = useAppStore()
 
   const [tab, setTab] = useState<Tab>('items')
@@ -40,11 +40,15 @@ export function SessionPage() {
   const [billImageLoading, setBillImageLoading] = useState(false)
   const [editingUserId, setEditingUserId] = useState('')
   const [exporting, setExporting] = useState<'image' | 'pdf' | ''>('')
+  const [addingItem, setAddingItem] = useState(false)
+  const [newItemName, setNewItemName] = useState('')
+  const [newItemPrice, setNewItemPrice] = useState('')
 
   useSessionSync(id)
 
   const session = sessions.find((s) => s.id === id)
   const isAdmin = currentUser?.role === 'admin'
+  const isCreator = !isAdmin && session?.createdBy === currentUser?.id
 
   if (!session) return (
     <Layout>
@@ -338,7 +342,7 @@ export function SessionPage() {
                     participants={participants}
                     currentUserId={selectionUserId}
                     isLocked={!isAdmin && (isSessionLocked || myLocked)}
-                    isAdmin={isAdmin}
+                    isAdmin={isAdmin || isCreator}
                     canEditSelection={!isAdmin || Boolean(editingUser)}
                     showSelectionControl={!isAdmin || Boolean(editingUser)}
                     onSelect={handleSelect}
@@ -368,6 +372,11 @@ export function SessionPage() {
                         toast.error('Quantity could not be saved')
                       })
                     }}
+                    onDelete={isCreator ? (itemId) => {
+                      removeBillItem(session.id, itemId).catch(() => {
+                        toast.error('Item could not be removed')
+                      })
+                    } : undefined}
                   />
                 )
               })}
@@ -381,6 +390,69 @@ export function SessionPage() {
                 </div>
               )}
             </div>
+
+            {/* Add item — creator only */}
+            {isCreator && (
+              <div className="mx-4 mt-3">
+                {addingItem ? (
+                  <div className="bg-surface border border-primary/30 rounded-xl p-3 space-y-2">
+                    <input
+                      autoFocus
+                      value={newItemName}
+                      onChange={(e) => setNewItemName(e.target.value)}
+                      placeholder="Item name"
+                      className="w-full bg-surface-raised border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/50"
+                    />
+                    <input
+                      value={newItemPrice}
+                      onChange={(e) => setNewItemPrice(e.target.value.replace(/[^0-9.]/g, ''))}
+                      placeholder="Price (₹)"
+                      inputMode="decimal"
+                      className="w-full bg-surface-raised border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/50"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setAddingItem(false); setNewItemName(''); setNewItemPrice('') }}
+                        className="flex-1 py-2 rounded-lg border border-line text-xs text-fg-muted hover:bg-surface-overlay transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const price = parseFloat(newItemPrice)
+                          if (!newItemName.trim() || isNaN(price) || price <= 0) {
+                            toast.error('Enter a valid name and price')
+                            return
+                          }
+                          try {
+                            await addBillItem(session.id, {
+                              name: newItemName.trim(),
+                              quantity: 1,
+                              unitPrice: price,
+                              totalPrice: price,
+                            })
+                            setNewItemName(''); setNewItemPrice('')
+                            toast.success('Item added')
+                          } catch {
+                            toast.error('Item could not be added')
+                          }
+                        }}
+                        className="flex-1 py-2 rounded-lg bg-primary text-xs font-semibold text-primary-fg hover:bg-primary-hover transition-colors"
+                      >
+                        Add item
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingItem(true)}
+                    className="w-full flex items-center justify-center gap-2 border border-dashed border-primary/40 hover:border-primary/70 bg-primary/5 hover:bg-primary/10 rounded-xl py-2.5 text-xs font-medium text-primary transition-all"
+                  >
+                    <Plus size={13} /> Add item to bill
+                  </button>
+                )}
+              </div>
+            )}
 
             {sharedChargesTotal > 0 && (
               <div className="mx-4 mt-3 flex items-start gap-2 bg-surface border border-line rounded-xl px-4 py-3">
@@ -629,7 +701,7 @@ export function SessionPage() {
               )
             })}
 
-            {isAdmin && nonParticipants.length > 0 && (
+            {(isAdmin || isCreator) && nonParticipants.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-fg-faint uppercase tracking-wider mb-2 mt-4">Add to session</p>
                 {nonParticipants.map((user) => (

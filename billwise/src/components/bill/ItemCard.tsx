@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState } from 'react'
-import { Check, Sliders, Lock, CircleCheck, Clock3, TriangleAlert } from 'lucide-react'
+import { Check, Sliders, Lock, CircleCheck, Clock3, TriangleAlert, Trash2 } from 'lucide-react'
 import type { BillItem, ItemSelection, User } from '../../types'
 import { formatCurrency, getAllocatedPortion } from '../../services/calculations'
 import { Modal } from '../shared/Modal'
@@ -22,6 +22,7 @@ interface ItemCardProps {
   onEditName?: (itemId: string, name: string) => void
   onEditPrice?: (itemId: string, price: number) => void
   onEditQuantity?: (itemId: string, quantity: number) => void
+  onDelete?: (itemId: string) => void
 }
 
 const LONG_PRESS_MS = 600
@@ -53,6 +54,7 @@ export function ItemCard({
   onEditName,
   onEditPrice,
   onEditQuantity,
+  onDelete,
 }: ItemCardProps) {
   const [showSlider, setShowSlider] = useState(false)
   const [editingName, setEditingName] = useState(false)
@@ -211,6 +213,16 @@ export function ItemCard({
                     <span className="ml-1 opacity-0 group-hover:opacity-100 text-fg-faint text-[10px]">✎</span>
                   )}
                 </p>
+              )}
+              {onDelete && !isLocked && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onDelete(item.id) }}
+                  className="mt-0.5 flex items-center gap-0.5 text-[10px] text-fg-faint hover:text-danger transition-colors opacity-0 group-hover:opacity-100"
+                  title="Remove item"
+                >
+                  <Trash2 size={10} />
+                </button>
               )}
               <div className="flex items-center gap-1.5 mt-0.5">
                 <p className="text-xs text-fg-faint">

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Users, Receipt, Settings, ChevronRight, Clock,
-  CheckCircle, Sparkles, Eye, EyeOff, Trash2,
+  CheckCircle, Sparkles, Eye, EyeOff, Trash2, ShieldCheck, ShieldOff,
 } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
@@ -134,6 +134,7 @@ export function AdminDashboard() {
 
         {tab === 'settings' && (
           <div className="p-4 space-y-4">
+            <PinRequirementToggle />
             <div className="bg-surface rounded-2xl border border-line overflow-hidden">
               <div className="px-4 py-3 border-b border-line">
                 <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Bill OCR</p>
@@ -200,6 +201,68 @@ export function AdminDashboard() {
         </div>
       </Modal>
     </Layout>
+  )
+}
+
+function PinRequirementToggle() {
+  const { requirePin, setRequirePin } = useAppStore()
+  const [saving, setSaving] = useState(false)
+
+  const toggle = async () => {
+    setSaving(true)
+    try {
+      await setRequirePin(!requirePin)
+      toast.success(requirePin ? 'PIN login disabled — members tap to enter directly' : 'PIN login enabled')
+    } catch {
+      toast.error('Could not save setting')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-surface rounded-2xl border border-line overflow-hidden">
+      <div className="px-4 py-3 border-b border-line">
+        <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Security · Member Login</p>
+      </div>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${requirePin ? 'bg-primary/15 border border-primary/30' : 'bg-surface-overlay border border-line'}`}>
+              {requirePin
+                ? <ShieldCheck size={16} className="text-primary" />
+                : <ShieldOff size={16} className="text-fg-subtle" />}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-fg">Require PIN to login</p>
+              <p className="text-xs text-fg-subtle mt-0.5 leading-relaxed">
+                {requirePin
+                  ? 'Members must enter their 4-digit PIN when logging in.'
+                  : 'Members tap their profile to enter directly — no PIN needed.'}
+              </p>
+            </div>
+          </div>
+          {/* Toggle switch */}
+          <button
+            onClick={toggle}
+            disabled={saving}
+            aria-label={requirePin ? 'Disable PIN requirement' : 'Enable PIN requirement'}
+            className={`relative shrink-0 w-11 h-6 rounded-full border-2 transition-all duration-200 ${
+              requirePin
+                ? 'bg-primary border-primary'
+                : 'bg-surface-overlay border-line'
+            } disabled:opacity-50`}
+          >
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200 ${
+              requirePin ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'
+            }`} />
+          </button>
+        </div>
+        <p className="text-[10px] text-fg-faint mt-3 pl-12">
+          Admin login always requires a PIN regardless of this setting.
+        </p>
+      </div>
+    </div>
   )
 }
 

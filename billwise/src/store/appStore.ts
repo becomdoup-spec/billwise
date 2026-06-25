@@ -2,10 +2,11 @@ import { create } from 'zustand'
 import type { User, Session, BillItem, ItemSelection } from '../types'
 import { generateId, hashPin } from '../services/calculations'
 import {
-  dbFindUserByPin, dbCreateUser, dbUpdateUserPin, dbDeleteUser,
+  dbFindUserByPin, dbCreateUser, dbUpdateUserPin, dbDeleteUser, dbGetUsers,
   dbCreateSession, dbUpdateSession, dbDeleteSession, dbUploadBillImage, dbAddParticipant, dbRemoveParticipant,
   dbSetBillItems, dbCreateBillItem, dbUpdateBillItem, dbDeleteBillItem,
   dbUpsertSelection, dbDeleteSelection, dbLockUserSelections, dbUnlockUserSelections,
+  dbSetAppSetting,
 } from '../lib/db'
 import { supabase } from '../lib/supabase'
 
@@ -19,6 +20,11 @@ interface AppStore {
   cloudReady: boolean
   cloudSyncError: string
   selectionsReady: boolean
+
+  // Settings
+  requirePin: boolean
+  setRequirePin: (val: boolean) => Promise<void>
+  hydrateRequirePin: (val: boolean) => void
 
   // Auth
   currentUser: User | null
@@ -86,6 +92,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
       cloudSyncError: supabase ? '' : 'Supabase is not configured for this deployment',
       selectionsReady: false,
       currentUser: null,
+      requirePin: true,
+
+      setRequirePin: async (val) => {
+        set({ requirePin: val })
+        await dbSetAppSetting('require_pin', val ? 'true' : 'false')
+      },
+
+      hydrateRequirePin: (val) => set({ requirePin: val }),
 
       setCurrentUser: (user) => set({ currentUser: user }),
 
@@ -123,7 +137,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
           createdAt: new Date().toISOString(),
         }
         await dbCreateUser(user)
+        // Optimistic update first so it shows instantly on this device
         set((s) => ({ users: [...s.users.filter((u) => u.id !== user.id), user] }))
+        // Then sync full list from Supabase to guarantee consistency
+        dbGetUsers().then((fresh) => {
+          if (fresh.length > 0) set({ users: fresh })
+        }).catch(() => {/* silent — optimistic update is already applied */})
         return user
       },
 
@@ -342,18 +361,31 @@ export const useAppStore = create<AppStore>((set, get) => ({
         requireCloudConnection()
         const now = new Date().toISOString()
         await dbLockUserSelections(sessionId, userId, now)
-        set((s) => ({
-          sessions: s.sessions.map((sess) =>
-            sess.id === sessionId && !(sess.lockedParticipantIds ?? []).includes(userId)
-              ? { ...sess, lockedParticipantIds: [...(sess.lockedParticipantIds ?? []), userId] }
-              : sess,
-          ),
-          selections: s.selections.map((sel) =>
-            sel.sessionId === sessionId && sel.userId === userId
-              ? { ...sel, lockedAt: now }
-              : sel,
-          ),
-        }))
+        set((s) => {
+          const updatedSessions = s.sessions.map((sess) => {
+            if (sess.id !== sessionId) return sess
+            const newLocked = [...new Set([...(sess.lockedParticipantIds ?? []), userId])]
+            const allDone = sess.participantIds.length > 0 && newLocked.length >= sess.participantIds.length
+            return {
+              ...sess,
+              lockedParticipantIds: newLocked,
+              ...(allDone && !sess.completedAt ? { completedAt: now, status: 'completed' as const } : {}),
+            }
+          })
+          // persist completedAt to DB if we just completed
+          const updated = updatedSessions.find((s) => s.id === sessionId)
+          if (updated?.completedAt === now) {
+            dbUpdateSession(sessionId, { completedAt: now, status: 'completed' }).catch(console.error)
+          }
+          return {
+            sessions: updatedSessions,
+            selections: s.selections.map((sel) =>
+              sel.sessionId === sessionId && sel.userId === userId
+                ? { ...sel, lockedAt: now }
+                : sel,
+            ),
+          }
+        })
       },
 
       unlockUserSelections: async (sessionId, userId) => {

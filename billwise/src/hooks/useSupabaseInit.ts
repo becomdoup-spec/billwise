@@ -4,7 +4,7 @@
  */
 import { useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections } from '../lib/db'
+import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections, dbGetAppSetting } from '../lib/db'
 import { useAppStore } from '../store/appStore'
 
 export function useSupabaseInit() {
@@ -12,6 +12,7 @@ export function useSupabaseInit() {
     hydrateFromSupabase,
     hydrateBillItemsFromSupabase,
     hydrateSelectionsFromSupabase,
+    hydrateRequirePin,
     setCloudSyncState,
   } = useAppStore()
 
@@ -25,15 +26,17 @@ export function useSupabaseInit() {
     const refresh = async () => {
       const version = ++refreshVersion
       try {
-        const [users, sessions, items, selections] = await Promise.all([
+        const [users, sessions, items, selections, requirePinVal] = await Promise.all([
           dbGetUsers(),
           dbGetSessions(),
           dbGetAllBillItems(),
           dbGetAllSelections(),
+          dbGetAppSetting('require_pin'),
         ])
         if (version !== refreshVersion) return
         hydrateFromSupabase(users, sessions)
         hydrateBillItemsFromSupabase(items)
+        if (requirePinVal !== null) hydrateRequirePin(requirePinVal !== 'false')
         // Keep this last: selectionsReady means every split input is hydrated.
         hydrateSelectionsFromSupabase(selections)
       } catch (error) {
@@ -58,7 +61,7 @@ export function useSupabaseInit() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'item_selections' }, refresh)
       .subscribe()
 
-    const refreshTimer = window.setInterval(refresh, 10000)
+    const refreshTimer = window.setInterval(refresh, 5000)
     window.addEventListener('focus', refresh)
 
     return () => {

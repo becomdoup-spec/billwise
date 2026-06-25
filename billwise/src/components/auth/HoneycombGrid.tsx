@@ -14,8 +14,21 @@ const ROW_H = Math.round(COL_W * Math.sqrt(3) / 2)  // = 87 — equidistant hex 
 const R = 28       // avatar circle radius (w-14 = 56px)
 const EDGE_THRESHOLD = 102  // max distance to draw a connecting edge
 
-// Row plan: alternating wide (4) and narrow (3) rows — classic honeycomb offset
-const ROW_PLAN = [3, 4, 3, 1]
+// Build a balanced row plan for any user count.
+// Alternates narrow (3) and wide (4) rows; last row takes whatever remains — always centered.
+function buildRowPlan(count: number): number[] {
+  if (count <= 0) return []
+  const rows: number[] = []
+  let remaining = count
+  let narrow = true
+  while (remaining > 0) {
+    const size = Math.min(narrow ? 3 : 4, remaining)
+    rows.push(size)
+    remaining -= size
+    narrow = !narrow
+  }
+  return rows
+}
 
 interface NodeData {
   x: number
@@ -26,9 +39,10 @@ interface NodeData {
 
 function buildNodes(users: User[]): NodeData[] {
   const nodes: NodeData[] = []
+  const rowPlan = buildRowPlan(users.length)
   let ui = 0
-  for (let r = 0; r < ROW_PLAN.length && ui < users.length; r++) {
-    const count = ROW_PLAN[r]
+  for (let r = 0; r < rowPlan.length && ui < users.length; r++) {
+    const count = rowPlan[r]
     const y = r * ROW_H
     for (let c = 0; c < count && ui < users.length; c++) {
       // (c - (count-1)/2) centers each row; alternating counts create the hex offset

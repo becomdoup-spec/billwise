@@ -36,6 +36,7 @@ export interface Session {
   totalAmount: number
   createdBy: string
   createdAt: string
+  completedAt?: string        // set when all participants lock in
   participantIds: string[]
   lockedParticipantIds: string[]
 }

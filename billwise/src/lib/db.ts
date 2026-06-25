@@ -36,6 +36,7 @@ function rowToSession(
     totalAmount: Number(r.total_amount),
     createdBy: (r.created_by as string) ?? '',
     createdAt: r.created_at as string,
+    completedAt: r.completed_at as string | undefined,
     participantIds,
     lockedParticipantIds,
   }
@@ -166,6 +167,7 @@ export async function dbUpdateSession(id: string, data: Partial<Session>): Promi
   if (data.sgst !== undefined) patch.sgst = data.sgst
   if (data.totalAmount !== undefined) patch.total_amount = data.totalAmount
   if (data.billImageUrl !== undefined) patch.bill_image_url = data.billImageUrl
+  if (data.completedAt !== undefined) patch.completed_at = data.completedAt
   if (Object.keys(patch).length) {
     const { error } = await supabase.from('sessions').update(patch).eq('id', id)
     if (error) { console.error('[db] updateSession', error); throw error }
@@ -347,6 +349,20 @@ export async function dbUnlockUserSelections(sessionId: string, userId: string):
   ])
   if (participantRes.error) { console.error('[db] unlockParticipant', participantRes.error); throw participantRes.error }
   if (selectionRes.error) { console.error('[db] unlockUserSelections', selectionRes.error); throw selectionRes.error }
+}
+
+// ── App Settings ──────────────────────────────────────────────────
+
+export async function dbGetAppSetting(key: string): Promise<string | null> {
+  if (!supabase) return null
+  const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle()
+  return data ? (data.value as string) : null
+}
+
+export async function dbSetAppSetting(key: string, value: string): Promise<void> {
+  if (!supabase) return
+  const { error } = await supabase.from('app_settings').upsert({ key, value })
+  if (error) { console.error('[db] setAppSetting', error); throw error }
 }
 
 // Re-export rowToSelection for use in realtime subscription
