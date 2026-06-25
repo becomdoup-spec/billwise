@@ -92,6 +92,25 @@ export function getFixedBillTotal(items: BillItem[], storedTotal?: number): numb
   return summaryTotals.length > 0 ? Math.min(...summaryTotals) : storedTotal
 }
 
+/**
+ * Returns true only when a session is genuinely complete:
+ * ALL participants have locked AND every selectable item has at least one selector.
+ * A session where some items have 0 selectors must stay in the outstanding/pending state.
+ */
+export function isSessionComplete(
+  session: { participantIds: string[]; lockedParticipantIds?: string[] },
+  items: BillItem[],
+  selections: ItemSelection[],
+): boolean {
+  const { participantIds, lockedParticipantIds = [] } = session
+  if (participantIds.length === 0) return false
+  const everyoneLocked = participantIds.every((id) => lockedParticipantIds.includes(id))
+  if (!everyoneLocked) return false
+  const selectableItems = items.filter((item) => !isBillSummaryItemName(item.name))
+  if (selectableItems.length === 0) return true
+  return selectableItems.every((item) => selections.some((s) => s.itemId === item.id))
+}
+
 export function isBillSummaryItemName(name: string): boolean {
   const normalized = name.toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim()
   return /^(sub ?total|grand total|net (to pay|pay|total)|total( amount| bill| invoice.*)?|amount (payable|due)|invoice value|round.*|staff (contribution|charge).*|service (charge|tax).*|[csi]?gst.*|[as]?st|vat.*|pay)$/.test(normalized)

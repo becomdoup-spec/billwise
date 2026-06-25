@@ -16,7 +16,9 @@
       "Bash(kill 30562 30510 35281 35262)",
       "Skill(update-config)",
       "Skill(update-config:*)",
-      "Bash(pkill -f vite)"
+      "Bash(pkill -f vite)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(pkill -f \"npm run dev\")"
     ]
   }
 }

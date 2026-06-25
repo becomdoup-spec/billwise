@@ -6,7 +6,7 @@ import { Header } from '../components/shared/Header'
 import { Modal } from '../components/shared/Modal'
 import { toast } from '../components/shared/Toast'
 import { useAppStore } from '../store/appStore'
-import { formatCurrency, computeSplits } from '../services/calculations'
+import { formatCurrency, computeSplits, isSessionComplete } from '../services/calculations'
 import clsx from 'clsx'
 import type { Session, User } from '../types'
 
@@ -42,15 +42,11 @@ export function UserDashboard() {
   )
 
   const outstanding = mySessions.filter((s) => {
-    const allLocked = s.participantIds.length > 0
-      && s.participantIds.every((id) => (s.lockedParticipantIds ?? []).includes(id))
-    return !allLocked
+    return !isSessionComplete(s, billItems[s.id] ?? [], selections.filter((sel) => sel.sessionId === s.id))
   })
 
   const completed = mySessions.filter((s) => {
-    const allLocked = s.participantIds.length > 0
-      && s.participantIds.every((id) => (s.lockedParticipantIds ?? []).includes(id))
-    if (!allLocked) return false
+    if (!isSessionComplete(s, billItems[s.id] ?? [], selections.filter((sel) => sel.sessionId === s.id))) return false
     if (!s.completedAt) return true // legacy: show always
     return Date.now() - new Date(s.completedAt).getTime() < TWO_DAYS_MS
   })
@@ -205,9 +201,11 @@ function BillCard({
 }) {
   const participants = users.filter((u) => session.participantIds.includes(u.id))
   const lockedIds = session.lockedParticipantIds ?? []
-  const lockedCount = participants.filter((p) => lockedIds.includes(p.id)).length
-  const allLocked = participants.length > 0 && lockedCount === participants.length
-  const iMeLocked = lockedIds.includes(currentUser?.id ?? '')
+  const isParticipantDone = (uid: string) =>
+    lockedIds.includes(uid) && sessionSelections.some((s) => s.userId === uid)
+  const doneCount = participants.filter((p) => isParticipantDone(p.id)).length
+  const allLocked = participants.length > 0 && doneCount === participants.length
+  const iMeLocked = isParticipantDone(currentUser?.id ?? '')
 
   const splits = computeSplits(
     billItems,
@@ -288,13 +286,14 @@ function BillCard({
       <div className="flex items-center gap-1.5 mb-3 flex-wrap">
         {participants.map((p, i) => {
           const locked = lockedIds.includes(p.id)
+          const done = isParticipantDone(p.id)
           const isMe = p.id === currentUser?.id
           return (
             <div
               key={p.id}
               className={clsx(
                 'flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-medium transition-all',
-                locked
+                done
                   ? 'bg-success/10 border-success/25 text-success'
                   : 'bg-warning/10 border-warning/25 text-warning',
               )}
@@ -334,7 +333,7 @@ function BillCard({
             </span>
           ) : iMeLocked ? (
             <span className="flex items-center gap-1 text-xs text-success">
-              <CheckCircle size={10} /> You're done · waiting for {participants.length - lockedCount} more
+              <CheckCircle size={10} /> You're done · waiting for {participants.length - doneCount} more
             </span>
           ) : (
             <span className="flex items-center gap-1 text-xs text-warning">

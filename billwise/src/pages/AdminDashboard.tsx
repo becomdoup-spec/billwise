@@ -12,19 +12,21 @@ import { toast } from '../components/shared/Toast'
 import { useAppStore } from '../store/appStore'
 import { THEME_META, type Theme } from '../store/themeStore'
 import type { Session, User } from '../types'
-import { formatCurrency, hashPin } from '../services/calculations'
+import { formatCurrency, hashPin, isSessionComplete } from '../services/calculations'
 import clsx from 'clsx'
 
 type Tab = 'sessions' | 'users' | 'settings'
 
 export function AdminDashboard() {
   const navigate = useNavigate()
-  const { sessions, currentUser, updateSession, deleteSession, users } = useAppStore()
+  const { sessions, currentUser, updateSession, deleteSession, users, billItems, selections } = useAppStore()
   const [tab, setTab] = useState<Tab>('sessions')
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null)
 
-  const active = sessions.filter((s) => s.status !== 'completed')
-  const completed = sessions.filter((s) => s.status === 'completed')
+  // A session is only truly "completed" when all participants locked AND every item has a selector.
+  // Sessions with unallocated items stay in "Active" regardless of DB status.
+  const active = sessions.filter((s) => !isSessionComplete(s, billItems[s.id] ?? [], selections.filter((sel) => sel.sessionId === s.id)))
+  const completed = sessions.filter((s) => isSessionComplete(s, billItems[s.id] ?? [], selections.filter((sel) => sel.sessionId === s.id)))
 
   const togglePublic = async (session: Session) => {
     try {

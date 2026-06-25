@@ -4,8 +4,10 @@
  */
 import { useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections, dbGetAppSetting } from '../lib/db'
+import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections, dbGetAppSetting, dbUpdateSession } from '../lib/db'
 import { useAppStore } from '../store/appStore'
+import { isSessionComplete } from '../services/calculations'
+import type { BillItem, ItemSelection } from '../types'
 
 export function useSupabaseInit() {
   const {
@@ -45,6 +47,26 @@ export function useSupabaseInit() {
         if (defaultThemeVal !== null) hydrateDefaultTheme(defaultThemeVal)
         // Keep this last: selectionsReady means every split input is hydrated.
         hydrateSelectionsFromSupabase(selections)
+
+        // Auto-revert sessions that are marked "completed" in the DB but have
+        // unallocated items (no selector). This corrects data that was saved before
+        // the coverage-gate was introduced.
+        const itemsBySession = items.reduce<Record<string, BillItem[]>>((acc, item) => {
+          ;(acc[item.sessionId] ??= []).push(item)
+          return acc
+        }, {})
+        const selsBySession = selections.reduce<Record<string, ItemSelection[]>>((acc, sel) => {
+          ;(acc[sel.sessionId] ??= []).push(sel)
+          return acc
+        }, {})
+        sessions
+          .filter((s) => s.status === 'completed')
+          .forEach((s) => {
+            const trulyDone = isSessionComplete(s, itemsBySession[s.id] ?? [], selsBySession[s.id] ?? [])
+            if (!trulyDone) {
+              dbUpdateSession(s.id, { status: 'active', completedAt: undefined }).catch(console.error)
+            }
+          })
       } catch (error) {
         if (version !== refreshVersion) return
         const message = error instanceof Error

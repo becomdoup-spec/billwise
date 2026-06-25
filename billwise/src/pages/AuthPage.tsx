@@ -9,7 +9,7 @@ import { PinPad } from '../components/auth/PinPad'
 import { HoneycombGrid } from '../components/auth/HoneycombGrid'
 import { ThemeToggle } from '../components/shared/ThemeToggle'
 import { useAppStore } from '../store/appStore'
-import { hashPin, formatCurrency, computeSplits } from '../services/calculations'
+import { hashPin, formatCurrency, computeSplits, isSessionComplete } from '../services/calculations'
 import clsx from 'clsx'
 import type { Session, User } from '../types'
 
@@ -66,19 +66,16 @@ export function AuthPage() {
   const adminUsers = users.filter((u) => u.role === 'admin')
   const selectedUser = users.find((u) => u.id === selectedUserId)
 
-  // Outstanding bills visible on landing page
+  // Outstanding bills visible on landing page — not truly complete (someone unlocked OR an item has no selector)
   const outstandingBills = sessions.filter((s) => {
     if (!s.isPublic) return false
-    const allLocked = s.participantIds.length > 0
-      && s.participantIds.every((id) => (s.lockedParticipantIds ?? []).includes(id))
-    return !allLocked
+    return !isSessionComplete(s, billItems[s.id] ?? [], selections.filter((sel) => sel.sessionId === s.id))
   })
 
-  // Completed bills — all participants locked in
+  // Completed bills — all participants locked AND every item claimed
   const completedBills = sessions.filter((s) => {
     if (!s.isPublic) return false
-    return s.participantIds.length > 0
-      && s.participantIds.every((id) => (s.lockedParticipantIds ?? []).includes(id))
+    return isSessionComplete(s, billItems[s.id] ?? [], selections.filter((sel) => sel.sessionId === s.id))
   })
 
   const openAdminAccess = () => {
@@ -199,6 +196,7 @@ export function AuthPage() {
                             key={session.id}
                             session={session}
                             users={users}
+                            sessionSelections={selections.filter((s) => s.sessionId === session.id)}
                             variant="outstanding"
                             onPickMember={(userId) => {
                               setBillPickerSession(null)
@@ -228,6 +226,7 @@ export function AuthPage() {
                               key={session.id}
                               session={session}
                               users={users}
+                              sessionSelections={selections.filter((s) => s.sessionId === session.id)}
                               variant="completed"
                               onPickMember={(userId) => setSplitPopup({ session, userId })}
                             />
@@ -312,17 +311,21 @@ export function AuthPage() {
 // ── Landing bill card ──────────────────────────────────────────────
 
 function LandingBillCard({
-  session, users, onPickMember, variant = 'outstanding',
+  session, users, sessionSelections, onPickMember, variant = 'outstanding',
 }: {
   session: Session
   users: User[]
+  sessionSelections: import('../types').ItemSelection[]
   onPickMember: (userId: string) => void
   variant?: 'outstanding' | 'completed'
 }) {
   const [expanded, setExpanded] = useState(false)
   const participants = users.filter((u) => session.participantIds.includes(u.id))
-  const lockedCount = participants.filter((p) => (session.lockedParticipantIds ?? []).includes(p.id)).length
-  const pendingParticipants = participants.filter((p) => !(session.lockedParticipantIds ?? []).includes(p.id))
+  const lockedIds = session.lockedParticipantIds ?? []
+  const isParticipantDone = (uid: string) =>
+    lockedIds.includes(uid) && sessionSelections.some((s) => s.userId === uid)
+  const doneCount = participants.filter((p) => isParticipantDone(p.id)).length
+  const pendingParticipants = participants.filter((p) => !isParticipantDone(p.id))
 
   const isCompleted = variant === 'completed'
 
@@ -360,14 +363,14 @@ function LandingBillCard({
         <div className="flex items-center gap-1.5 pl-8">
           <div className="flex -space-x-1">
             {participants.slice(0, 5).map((p, i) => {
-              const isLocked = (session.lockedParticipantIds ?? []).includes(p.id)
+              const done = isParticipantDone(p.id)
               return (
                 <div
                   key={p.id}
-                  title={`${p.name} — ${isLocked ? 'done' : 'pending'}`}
+                  title={`${p.name} — ${done ? 'done' : 'pending'}`}
                   className={clsx(
                     'w-5 h-5 rounded-full border border-canvas flex items-center justify-center text-[8px] font-bold',
-                    isLocked ? 'bg-success/30 text-success' : 'bg-warning/20 text-warning',
+                    done ? 'bg-success/30 text-success' : 'bg-warning/20 text-warning',
                   )}
                   style={{ zIndex: participants.length - i }}
                 >
@@ -382,7 +385,7 @@ function LandingBillCard({
             )}
           </div>
           {!isCompleted && (
-            <span className="text-[9px] text-fg-faint">{lockedCount}/{participants.length}</span>
+            <span className="text-[9px] text-fg-faint">{doneCount}/{participants.length}</span>
           )}
         </div>
 

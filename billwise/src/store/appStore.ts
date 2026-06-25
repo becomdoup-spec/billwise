@@ -10,6 +10,7 @@ import {
 } from '../lib/db'
 import { applyAdminDefaultTheme } from './themeStore'
 import type { Theme } from './themeStore'
+import { isBillSummaryItemName } from '../services/calculations'
 import { supabase } from '../lib/supabase'
 
 interface AppStore {
@@ -390,10 +391,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const now = new Date().toISOString()
         await dbLockUserSelections(sessionId, userId, now)
         set((s) => {
+          // Check if every selectable item has at least one selector — only then auto-complete
+          const sessionItems = (s.billItems[sessionId] ?? []).filter(
+            (item) => !isBillSummaryItemName(item.name),
+          )
+          const sessionSels = s.selections.filter((sel) => sel.sessionId === sessionId)
+          const allItemsCovered = sessionItems.length === 0 || sessionItems.every(
+            (item) => sessionSels.some((sel) => sel.itemId === item.id),
+          )
+
           const updatedSessions = s.sessions.map((sess) => {
             if (sess.id !== sessionId) return sess
             const newLocked = [...new Set([...(sess.lockedParticipantIds ?? []), userId])]
-            const allDone = sess.participantIds.length > 0 && newLocked.length >= sess.participantIds.length
+            const everyoneFinished = sess.participantIds.length > 0 && newLocked.length >= sess.participantIds.length
+            // Only mark completed if all participants locked AND all items have at least one selector
+            const allDone = everyoneFinished && allItemsCovered
             return {
               ...sess,
               lockedParticipantIds: newLocked,
@@ -420,14 +432,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
         requireCloudConnection()
         await dbUnlockUserSelections(sessionId, userId)
         set((s) => ({
-          sessions: s.sessions.map((sess) =>
-            sess.id === sessionId
-              ? {
-                  ...sess,
-                  lockedParticipantIds: (sess.lockedParticipantIds ?? []).filter((id) => id !== userId),
-                }
-              : sess,
-          ),
+          sessions: s.sessions.map((sess) => {
+            if (sess.id !== sessionId) return sess
+            const newLocked = (sess.lockedParticipantIds ?? []).filter((id) => id !== userId)
+            // If session was completed but a user is now unlocked, revert it to active so it
+            // appears in the pending section again for all participants.
+            const needsRevert = sess.status === 'completed'
+            if (needsRevert) {
+              dbUpdateSession(sessionId, { status: 'active', completedAt: undefined }).catch(console.error)
+            }
+            return {
+              ...sess,
+              lockedParticipantIds: newLocked,
+              ...(needsRevert ? { status: 'active' as const, completedAt: undefined } : {}),
+            }
+          }),
           selections: s.selections.map((sel) =>
             sel.sessionId === sessionId && sel.userId === userId
               ? { ...sel, lockedAt: undefined }

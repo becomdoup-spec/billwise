@@ -92,9 +92,12 @@ export function SessionPage() {
   // All-locked state — triggers final split reveal
   const lockStatus = participants.map((p) => {
     const pSels = sessionSelections.filter((s) => s.userId === p.id)
-    return { user: p, locked: (session.lockedParticipantIds ?? []).includes(p.id), count: pSels.length }
+    const isLocked = (session.lockedParticipantIds ?? []).includes(p.id)
+    // Locked with 0 item selections = treated as pending — they haven't claimed anything
+    const isDone = isLocked && pSels.length > 0
+    return { user: p, locked: isLocked, done: isDone, count: pSels.length }
   })
-  const allParticipantsLocked = participants.length > 0 && lockStatus.every((x) => x.locked)
+  const allParticipantsLocked = participants.length > 0 && lockStatus.every((x) => x.done)
   const hasBillImage = Boolean(session.billImageBase64 || session.billImageUrl)
 
   const handleViewBillImage = async () => {
@@ -209,6 +212,13 @@ export function SessionPage() {
             >
               <CheckCircle size={12} /> Done
             </button>
+          ) : myLocked ? (
+            <button
+              onClick={handleUnlockMine}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border bg-surface border-line text-fg-muted hover:bg-surface-raised hover:text-fg transition-all active:scale-95"
+            >
+              <Lock size={12} /> Unlock
+            </button>
           ) : undefined
         }
       />
@@ -229,14 +239,6 @@ export function SessionPage() {
           <p className="text-xs text-fg-subtle mt-0.5">
             {lockedCount}/{participants.length} done
           </p>
-          {!isAdmin && myLocked && !isSessionLocked && (
-            <button
-              onClick={handleUnlockMine}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-            >
-              <Lock size={11} /> Unlock selections
-            </button>
-          )}
         </div>
       </div>
 
@@ -491,25 +493,27 @@ export function SessionPage() {
                 )}
               </div>
               <div className="p-3 flex flex-wrap gap-2">
-                {lockStatus.map(({ user, locked }) => (
+                {lockStatus.map(({ user, done, locked, count }) => (
                   <div
                     key={user.id}
                     className={clsx(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all',
-                      locked
+                      done
                         ? 'bg-success/10 border-success/25 text-success'
                         : 'bg-warning/10 border-warning/25 text-warning',
                     )}
                   >
                     <div className={clsx(
                       'w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold',
-                      locked ? 'bg-success/30 text-success' : 'bg-warning/20 text-warning',
+                      done ? 'bg-success/30 text-success' : 'bg-warning/20 text-warning',
                     )}>
                       {user.name[0]?.toUpperCase()}
                     </div>
                     {user.id === viewingUserId ? 'You' : user.name.split(' ')[0]}
-                    <span className="opacity-70">· {locked ? 'Done' : 'Pending'}</span>
-                    {locked
+                    <span className="opacity-70">
+                      · {done ? 'Done' : locked && count === 0 ? 'No items' : 'Pending'}
+                    </span>
+                    {done
                       ? <Lock size={9} />
                       : <Clock size={9} className="opacity-50" />}
                   </div>
@@ -619,6 +623,8 @@ export function SessionPage() {
             {participants.map((user) => {
               const userSels = sessionSelections.filter((s) => s.userId === user.id)
               const isUserLocked = (session.lockedParticipantIds ?? []).includes(user.id)
+              // Locked with 0 selections = still "pending" — hasn't claimed anything
+              const isUserDone = isUserLocked && userSels.length > 0
               const userSplit = splits.find((s) => s.userId === user.id)
 
               return (
@@ -631,11 +637,11 @@ export function SessionPage() {
                       <p className="text-sm font-semibold text-fg truncate">{user.name}</p>
                       <span className={clsx(
                         'text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0',
-                        isUserLocked
+                        isUserDone
                           ? 'bg-success/10 border-success/25 text-success'
                           : 'bg-warning/10 border-warning/25 text-warning',
                       )}>
-                        {isUserLocked ? 'Done' : 'Pending'}
+                        {isUserDone ? 'Done' : isUserLocked ? 'No items' : 'Pending'}
                       </span>
                     </div>
                     <p className="text-xs text-fg-subtle mt-0.5">
@@ -674,7 +680,7 @@ export function SessionPage() {
                         }}
                         className={clsx(
                           'text-xs mt-1 transition-colors',
-                          isUserLocked
+                          isUserDone
                             ? 'text-success hover:text-success'
                             : 'text-warning hover:text-warning',
                         )}
