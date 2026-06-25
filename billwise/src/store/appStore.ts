@@ -25,6 +25,9 @@ interface AppStore {
   requirePin: boolean
   setRequirePin: (val: boolean) => Promise<void>
   hydrateRequirePin: (val: boolean) => void
+  showCompletedBills: boolean
+  setShowCompletedBills: (val: boolean) => Promise<void>
+  hydrateShowCompletedBills: (val: boolean) => void
 
   // Auth
   currentUser: User | null
@@ -93,6 +96,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       selectionsReady: false,
       currentUser: null,
       requirePin: true,
+      showCompletedBills: true,
 
       setRequirePin: async (val) => {
         set({ requirePin: val })
@@ -100,6 +104,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
       },
 
       hydrateRequirePin: (val) => set({ requirePin: val }),
+
+      setShowCompletedBills: async (val) => {
+        set({ showCompletedBills: val })
+        await dbSetAppSetting('show_completed_bills', val ? 'true' : 'false')
+      },
+
+      hydrateShowCompletedBills: (val) => set({ showCompletedBills: val }),
 
       setCurrentUser: (user) => set({ currentUser: user }),
 

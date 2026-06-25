@@ -135,6 +135,7 @@ export function AdminDashboard() {
         {tab === 'settings' && (
           <div className="p-4 space-y-4">
             <PinRequirementToggle />
+            <CompletedBillsToggle />
             <div className="bg-surface rounded-2xl border border-line overflow-hidden">
               <div className="px-4 py-3 border-b border-line">
                 <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Bill OCR</p>
@@ -261,6 +262,64 @@ function PinRequirementToggle() {
         <p className="text-[10px] text-fg-faint mt-3 pl-12">
           Admin login always requires a PIN regardless of this setting.
         </p>
+      </div>
+    </div>
+  )
+}
+
+function CompletedBillsToggle() {
+  const { showCompletedBills, setShowCompletedBills } = useAppStore()
+  const [saving, setSaving] = useState(false)
+
+  const toggle = async () => {
+    setSaving(true)
+    try {
+      await setShowCompletedBills(!showCompletedBills)
+      toast.success(showCompletedBills ? 'Completed bills hidden from landing page' : 'Completed bills shown on landing page')
+    } catch {
+      toast.error('Could not save setting')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-surface rounded-2xl border border-line overflow-hidden">
+      <div className="px-4 py-3 border-b border-line">
+        <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Landing Page · Completed Bills</p>
+      </div>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${showCompletedBills ? 'bg-success/15 border border-success/30' : 'bg-surface-overlay border border-line'}`}>
+              {showCompletedBills
+                ? <Eye size={16} className="text-success" />
+                : <EyeOff size={16} className="text-fg-subtle" />}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-fg">Show completed bills</p>
+              <p className="text-xs text-fg-subtle mt-0.5 leading-relaxed">
+                {showCompletedBills
+                  ? 'Completed splits are visible on the landing page for 2 days.'
+                  : 'Completed bills are hidden — only outstanding bills appear.'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={toggle}
+            disabled={saving}
+            aria-label={showCompletedBills ? 'Hide completed bills' : 'Show completed bills'}
+            className={`relative shrink-0 w-11 h-6 rounded-full border-2 transition-all duration-200 ${
+              showCompletedBills
+                ? 'bg-success border-success'
+                : 'bg-surface-overlay border-line'
+            } disabled:opacity-50`}
+          >
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200 ${
+              showCompletedBills ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'
+            }`} />
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -431,6 +490,7 @@ function AdminSessionCard({
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onTogglePublic() }}
+            title={session.isPublic ? 'Shown on landing page — click to hide' : 'Hidden from landing page — click to show'}
             className={clsx(
               'flex items-center gap-1.5 text-[10px] font-medium px-2.5 py-1 rounded-full border transition-all',
               session.isPublic
@@ -439,7 +499,7 @@ function AdminSessionCard({
             )}
           >
             {session.isPublic ? <Eye size={10} /> : <EyeOff size={10} />}
-            {session.isPublic ? 'Visible to users' : 'Hidden'}
+            {session.isPublic ? 'On landing' : 'Off landing'}
           </button>
         </div>
       </div>

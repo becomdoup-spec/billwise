@@ -32,7 +32,7 @@ function getAvatarStyle(user: User, allUsers: User[]) {
 
 export function AuthPage() {
   const navigate = useNavigate()
-  const { users, setCurrentUser, cloudReady, cloudSyncError, sessions, requirePin, billItems, selections, hydrateFromSupabase, hydrateBillItemsFromSupabase, hydrateSelectionsFromSupabase } = useAppStore()
+  const { users, setCurrentUser, cloudReady, cloudSyncError, sessions, requirePin, showCompletedBills, billItems, selections, hydrateFromSupabase, hydrateBillItemsFromSupabase, hydrateSelectionsFromSupabase } = useAppStore()
   const [step, setStep] = useState<Step>('profiles')
   const [role, setRole] = useState<Role>('user')
   const [selectedUserId, setSelectedUserId] = useState('')
@@ -183,9 +183,9 @@ export function AuthPage() {
             )}
 
             {/* Bills sections — two-column layout */}
-            {cloudReady && !cloudSyncError && (outstandingBills.length > 0 || completedBills.length > 0) && (
+            {cloudReady && !cloudSyncError && (outstandingBills.length > 0 || (showCompletedBills && completedBills.length > 0)) && (
               <div className="mt-10 w-full max-w-2xl mx-auto text-left">
-                <div className="grid grid-cols-2 gap-4">
+                <div className={clsx('grid gap-4', showCompletedBills ? 'grid-cols-2' : 'grid-cols-1')}>
                   {/* Left column — Outstanding */}
                   <div>
                     <div className="flex items-center gap-1.5 mb-3">
@@ -214,30 +214,32 @@ export function AuthPage() {
                     )}
                   </div>
 
-                  {/* Right column — Completed */}
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-3">
-                      <CheckCircle size={10} className="text-success shrink-0" />
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">Completed</p>
+                  {/* Right column — Completed (admin-controlled visibility) */}
+                  {showCompletedBills && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <CheckCircle size={10} className="text-success shrink-0" />
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">Completed</p>
+                      </div>
+                      {completedBills.length > 0 ? (
+                        <div className="space-y-2">
+                          {completedBills.map((session) => (
+                            <LandingBillCard
+                              key={session.id}
+                              session={session}
+                              users={users}
+                              variant="completed"
+                              onPickMember={(userId) => setSplitPopup({ session, userId })}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-line/60 p-4 text-center">
+                          <p className="text-[10px] text-fg-faint">Nothing recent</p>
+                        </div>
+                      )}
                     </div>
-                    {completedBills.length > 0 ? (
-                      <div className="space-y-2">
-                        {completedBills.map((session) => (
-                          <LandingBillCard
-                            key={session.id}
-                            session={session}
-                            users={users}
-                            variant="completed"
-                            onPickMember={(userId) => setSplitPopup({ session, userId })}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-line/60 p-4 text-center">
-                        <p className="text-[10px] text-fg-faint">Nothing recent</p>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             )}
@@ -474,9 +476,9 @@ function SplitPopupModal({
   const mySplit = splits.find((s) => s.userId === userId)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm mx-4 bg-surface rounded-3xl border border-line shadow-2xl overflow-hidden animate-slide-up">
+      <div className="relative w-full max-w-sm bg-surface rounded-3xl border border-line shadow-2xl overflow-hidden animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-line">
           <div className="flex items-center gap-3">
@@ -497,7 +499,7 @@ function SplitPopupModal({
         </div>
 
         {/* Item breakdown */}
-        <div className="px-5 py-3 max-h-64 overflow-y-auto space-y-1.5">
+        <div className="px-5 py-3 max-h-[40vh] overflow-y-auto space-y-1.5">
           {mySplit && mySplit.itemBreakdown.length > 0 ? (
             mySplit.itemBreakdown.map(({ item, portionPercentage, amount }) => (
               <div key={item.id} className="flex items-center justify-between gap-2">

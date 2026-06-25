@@ -13,6 +13,7 @@ export function useSupabaseInit() {
     hydrateBillItemsFromSupabase,
     hydrateSelectionsFromSupabase,
     hydrateRequirePin,
+    hydrateShowCompletedBills,
     setCloudSyncState,
   } = useAppStore()
 
@@ -26,17 +27,19 @@ export function useSupabaseInit() {
     const refresh = async () => {
       const version = ++refreshVersion
       try {
-        const [users, sessions, items, selections, requirePinVal] = await Promise.all([
+        const [users, sessions, items, selections, requirePinVal, showCompletedVal] = await Promise.all([
           dbGetUsers(),
           dbGetSessions(),
           dbGetAllBillItems(),
           dbGetAllSelections(),
           dbGetAppSetting('require_pin'),
+          dbGetAppSetting('show_completed_bills'),
         ])
         if (version !== refreshVersion) return
         hydrateFromSupabase(users, sessions)
         hydrateBillItemsFromSupabase(items)
         if (requirePinVal !== null) hydrateRequirePin(requirePinVal !== 'false')
+        if (showCompletedVal !== null) hydrateShowCompletedBills(showCompletedVal !== 'false')
         // Keep this last: selectionsReady means every split input is hydrated.
         hydrateSelectionsFromSupabase(selections)
       } catch (error) {
