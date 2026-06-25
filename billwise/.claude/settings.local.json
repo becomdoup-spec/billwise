@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx tsc *)",
+      "Bash(grep -v '```')",
+      "Read(//tmp/**)",
+      "Bash(curl -s -X POST https://grctrllynqgkbbijoozi.supabase.co/rest/v1/rpc/exec -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY3RybGx5bnFna2JiaWpvb3ppIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTkxMjQ3MiwiZXhwIjoyMDk3NDg4NDcyfQ.Cre95mvn2C2HDAvC0GPhUEFj8HlJwt64KWKAc8CjOLo' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY3RybGx5bnFna2JiaWpvb3ppIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTkxMjQ3MiwiZXhwIjoyMDk3NDg4NDcyfQ.Cre95mvn2C2HDAvC0GPhUEFj8HlJwt64KWKAc8CjOLo' -H 'Content-Type: application/json' -d '{\"query\":\"select 1\"}')",
+      "Bash(pkill -f \"vite\")",
+      "mcp__Claude_in_Chrome__navigate",
+      "Bash(npx vite *)",
+      "Bash(kill 30562 30510 35281 35262)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(pkill -f vite)"
+    ]
+  }
+}
