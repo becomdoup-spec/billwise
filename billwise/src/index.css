@@ -303,6 +303,10 @@
     box-sizing: border-box;
   }
 
+  button, a, [role="button"] {
+    touch-action: manipulation;
+  }
+
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
@@ -327,6 +331,9 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
+    /* promote to own compositing layer so it doesn't cause main-thread repaints */
+    will-change: transform;
+    transform: translateZ(0);
     background:
       radial-gradient(1100px 620px at 50% -8%, rgb(var(--primary) / 0.07), transparent 58%),
       radial-gradient(820px 520px at 88% 4%, rgb(var(--info) / 0.05), transparent 52%);
@@ -442,6 +449,12 @@ input[type='range'].slider-brand::-moz-range-thumb {
   .animate-list > *:nth-child(7) { animation-delay: 0.26s; }
   .animate-list > *:nth-child(8) { animation-delay: 0.30s; }
   .animate-list > *:nth-child(n + 9) { animation-delay: 0.34s; }
+
+  /* Page-level entrance — applied to top-level route wrappers */
+  .page-enter {
+    animation: pageEnter 0.25s cubic-bezier(0.32, 0.72, 0, 1) both;
+    will-change: opacity, transform;
+  }
 
   /* Card hover lift — subtle, premium */
   .card-lift {
@@ -559,6 +572,10 @@ input[type='range'].slider-brand::-moz-range-thumb {
   60% { opacity: 1; transform: scale(1.06); }
   100% { opacity: 1; transform: scale(1); }
 }
+@keyframes pageEnter {
+  0%   { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
 @keyframes auroraShift {
   0%   { background-position: 0% 50%; filter: hue-rotate(0deg); }
   50%  { background-position: 100% 50%; filter: hue-rotate(30deg); }
@@ -568,6 +585,6 @@ input[type='range'].slider-brand::-moz-range-thumb {
   to { stroke-dashoffset: -24; }
 }
 @keyframes nodePulse {
-  0%, 100% { r: 32; stroke-opacity: 0.12; }
-  50%       { r: 36; stroke-opacity: 0.28; }
+  0%, 100% { opacity: 0.12; }
+  50%       { opacity: 0.28; }
 }

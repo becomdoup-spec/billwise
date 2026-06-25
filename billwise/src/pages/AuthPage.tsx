@@ -167,7 +167,7 @@ export function AuthPage() {
                 </button>
               </div>
             ) : regularUsers.length > 0 ? (
-              <div className="mt-8 sm:mt-10 w-full flex justify-center overflow-x-auto">
+              <div className="mt-8 sm:mt-10 w-full flex justify-center overflow-hidden">
                 <HoneycombGrid
                   users={regularUsers}
                   avatarStyles={avatarStyles}

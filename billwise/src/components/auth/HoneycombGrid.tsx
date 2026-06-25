@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import type { User } from '../../types'
 
@@ -88,22 +88,26 @@ export function HoneycombGrid({ users, avatarStyles, onSelect }: Props) {
   const ox = -minX // logical → SVG coordinate offset
   const oy = -minY
 
-  // Scale down to fit container on small screens
-  useLayoutEffect(() => {
+  // Scale down to fit container — re-fires on orientation change / resize
+  useEffect(() => {
     if (!wrapRef.current) return
-    const available = wrapRef.current.offsetWidth
-    setScale(available < W ? available / W : 1)
+    const el = wrapRef.current
+    const update = (width: number) => setScale(width < W ? width / W : 1)
+    update(el.offsetWidth)
+    const ro = new ResizeObserver(([entry]) => update(entry.contentRect.width))
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [W])
 
   return (
-    // Outer div fills available width and sets the scaled height
-    <div ref={wrapRef} className="w-full" style={{ height: H * scale }}>
+    // Outer div fills available width and sets the scaled height; overflow-hidden prevents scroll-track line on mobile
+    <div ref={wrapRef} className="w-full overflow-hidden" style={{ height: H * scale }}>
     <div className="relative origin-top-left mx-auto" style={{ width: W, height: H, transform: `scale(${scale})` }}>
       {/* ── Network SVG ─────────────────────────────── */}
       <svg
         width={W}
         height={H}
-        className="absolute inset-0 pointer-events-none overflow-visible"
+        className="absolute inset-0 pointer-events-none"
       >
         <defs>
           {/* Edge paths for animateMotion */}
@@ -166,7 +170,7 @@ export function HoneycombGrid({ users, avatarStyles, onSelect }: Props) {
           )
         })}
 
-        {/* ── Node glow rings (behind avatars) ── */}
+        {/* ── Node glow rings (behind avatars) — opacity-only animation is GPU composited ── */}
         {nodes.map(({ x, y, idx }) => (
           <circle
             key={idx}
@@ -176,10 +180,10 @@ export function HoneycombGrid({ users, avatarStyles, onSelect }: Props) {
             fill="none"
             stroke="rgb(var(--primary))"
             strokeWidth={1.5}
-            strokeOpacity={hoveredIdx === idx ? 0.6 : 0.12}
             style={{
+              opacity: hoveredIdx === idx ? 0.6 : undefined,
               animation: `nodePulse ${2 + (idx % 4) * 0.5}s ${idx * 0.18}s ease-in-out infinite`,
-              transition: 'stroke-opacity 0.25s ease',
+              transition: 'opacity 0.25s ease',
             }}
           />
         ))}
@@ -192,7 +196,7 @@ export function HoneycombGrid({ users, avatarStyles, onSelect }: Props) {
           onClick={() => onSelect(user.id)}
           onMouseEnter={() => setHoveredIdx(idx)}
           onMouseLeave={() => setHoveredIdx(null)}
-          className="group absolute flex flex-col items-center focus:outline-none"
+          className="group absolute flex flex-col items-center focus:outline-none touch-manipulation"
           style={{
             left: x + ox - R,
             top: y + oy - R,
