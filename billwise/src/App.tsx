@@ -41,6 +41,14 @@ export default function App() {
           }
         />
         <Route
+          path="/user/new-session"
+          element={
+            <RequireAuth>
+              <NewSessionPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/session/:id"
           element={
             <RequireAuth>

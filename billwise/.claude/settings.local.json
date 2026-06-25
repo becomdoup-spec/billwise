@@ -15,7 +15,8 @@
       "Bash(npx vite *)",
       "Bash(kill 30562 30510 35281 35262)",
       "Skill(update-config)",
-      "Skill(update-config:*)"
+      "Skill(update-config:*)",
+      "Bash(pkill -f vite)"
     ]
   }
 }

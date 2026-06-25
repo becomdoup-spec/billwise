@@ -78,6 +78,226 @@
     color-scheme: dark;
   }
 
+  /* ── Gold (dark warm amber) ─────────────────────── */
+  [data-theme="gold"] {
+    --canvas: 10 8 4;
+    --surface: 18 14 6;
+    --surface-raised: 26 20 8;
+    --surface-overlay: 36 28 12;
+    --surface-hover: 48 38 16;
+    --fg: 255 248 220;
+    --fg-muted: 210 188 120;
+    --fg-subtle: 160 138 80;
+    --fg-faint: 110 90 50;
+    --line: 50 38 16;
+    --line-strong: 70 54 22;
+    --primary: 245 197 24;
+    --primary-hover: 252 211 60;
+    --primary-fg: 20 14 0;
+    --shadow: 0 0 0;
+    color-scheme: dark;
+  }
+
+  /* ── Gold & Silver (light, gold accent on silver canvas) ── */
+  [data-theme="gold-silver"] {
+    --canvas: 235 234 238;
+    --surface: 245 244 248;
+    --surface-raised: 255 254 255;
+    --surface-overlay: 226 224 230;
+    --surface-hover: 216 214 222;
+    --fg: 20 18 24;
+    --fg-muted: 72 68 82;
+    --fg-subtle: 108 104 118;
+    --fg-faint: 152 148 162;
+    --line: 210 208 218;
+    --line-strong: 190 187 200;
+    --primary: 180 145 20;
+    --primary-hover: 155 122 14;
+    --primary-fg: 255 255 255;
+    --shadow: 20 18 24;
+    color-scheme: light;
+  }
+
+  /* ── Silver (light, steel-slate accent) ──────────── */
+  [data-theme="silver"] {
+    --canvas: 242 244 248;
+    --surface: 252 253 255;
+    --surface-raised: 255 255 255;
+    --surface-overlay: 232 236 242;
+    --surface-hover: 220 225 234;
+    --fg: 15 20 36;
+    --fg-muted: 60 70 90;
+    --fg-subtle: 96 108 130;
+    --fg-faint: 144 155 175;
+    --line: 216 222 232;
+    --line-strong: 196 204 218;
+    --primary: 100 116 139;
+    --primary-hover: 71 85 105;
+    --primary-fg: 255 255 255;
+    --shadow: 15 20 36;
+    color-scheme: light;
+  }
+
+  /* ── Yellow Night ─────────────────────────────────── */
+  [data-theme="yellow-black"] {
+    --canvas: 6 6 6;
+    --surface: 12 12 12;
+    --surface-raised: 18 18 18;
+    --surface-overlay: 26 26 26;
+    --surface-hover: 34 34 34;
+    --fg: 255 252 220;
+    --fg-muted: 210 200 140;
+    --fg-subtle: 155 148 100;
+    --fg-faint: 100 96 66;
+    --line: 36 34 20;
+    --line-strong: 54 50 28;
+    --primary: 250 204 21;
+    --primary-hover: 253 224 71;
+    --primary-fg: 0 0 0;
+    --shadow: 0 0 0;
+    color-scheme: dark;
+  }
+
+  /* ── Orange Night ─────────────────────────────────── */
+  [data-theme="orange-black"] {
+    --canvas: 8 6 4;
+    --surface: 16 12 8;
+    --surface-raised: 22 17 11;
+    --surface-overlay: 30 24 16;
+    --surface-hover: 40 32 22;
+    --fg: 255 245 235;
+    --fg-muted: 220 190 155;
+    --fg-subtle: 165 135 100;
+    --fg-faint: 110 85 60;
+    --line: 44 32 20;
+    --line-strong: 64 48 30;
+    --primary: 249 115 22;
+    --primary-hover: 251 146 60;
+    --primary-fg: 255 255 255;
+    --shadow: 0 0 0;
+    color-scheme: dark;
+  }
+
+  /* ── Orange Day ───────────────────────────────────── */
+  [data-theme="orange-white"] {
+    --canvas: 255 250 245;
+    --surface: 255 253 250;
+    --surface-raised: 255 255 255;
+    --surface-overlay: 248 240 232;
+    --surface-hover: 240 230 218;
+    --fg: 28 10 0;
+    --fg-muted: 80 48 24;
+    --fg-subtle: 120 80 50;
+    --fg-faint: 168 128 100;
+    --line: 230 215 200;
+    --line-strong: 210 190 174;
+    --primary: 234 88 12;
+    --primary-hover: 194 65 12;
+    --primary-fg: 255 255 255;
+    --shadow: 28 10 0;
+    color-scheme: light;
+  }
+
+  /* ── Yellow Day ───────────────────────────────────── */
+  [data-theme="yellow-white"] {
+    --canvas: 254 252 236;
+    --surface: 255 254 245;
+    --surface-raised: 255 255 255;
+    --surface-overlay: 248 244 218;
+    --surface-hover: 240 234 196;
+    --fg: 20 16 0;
+    --fg-muted: 80 65 10;
+    --fg-subtle: 120 100 30;
+    --fg-faint: 170 148 70;
+    --line: 230 220 170;
+    --line-strong: 210 196 140;
+    --primary: 202 138 4;
+    --primary-hover: 161 108 0;
+    --primary-fg: 255 255 255;
+    --shadow: 20 16 0;
+    color-scheme: light;
+  }
+
+  /* ── Ocean Day ────────────────────────────────────── */
+  [data-theme="blue-white"] {
+    --canvas: 245 248 255;
+    --surface: 252 253 255;
+    --surface-raised: 255 255 255;
+    --surface-overlay: 232 238 252;
+    --surface-hover: 218 228 250;
+    --fg: 10 14 40;
+    --fg-muted: 50 60 100;
+    --fg-subtle: 88 100 148;
+    --fg-faint: 140 152 200;
+    --line: 210 220 245;
+    --line-strong: 188 202 238;
+    --primary: 37 99 235;
+    --primary-hover: 29 78 216;
+    --primary-fg: 255 255 255;
+    --shadow: 10 14 40;
+    color-scheme: light;
+  }
+
+  /* ── Ocean Night ──────────────────────────────────── */
+  [data-theme="blue-dark"] {
+    --canvas: 6 9 20;
+    --surface: 11 16 34;
+    --surface-raised: 16 23 48;
+    --surface-overlay: 24 34 66;
+    --surface-hover: 32 46 86;
+    --fg: 220 232 255;
+    --fg-muted: 148 170 220;
+    --fg-subtle: 100 122 175;
+    --fg-faint: 64 84 134;
+    --line: 30 44 80;
+    --line-strong: 46 64 110;
+    --primary: 96 165 250;
+    --primary-hover: 147 197 253;
+    --primary-fg: 6 14 36;
+    --shadow: 0 0 0;
+    color-scheme: dark;
+  }
+
+  /* ── Aurora (animated neon) ───────────────────────── */
+  [data-theme="aurora"] {
+    --canvas: 8 5 18;
+    --surface: 14 9 28;
+    --surface-raised: 20 14 40;
+    --surface-overlay: 28 20 56;
+    --surface-hover: 38 28 72;
+    --fg: 242 236 255;
+    --fg-muted: 185 168 225;
+    --fg-subtle: 130 114 172;
+    --fg-faint: 82 68 120;
+    --line: 42 30 76;
+    --line-strong: 62 46 106;
+    --primary: 168 85 247;
+    --primary-hover: 192 132 252;
+    --primary-fg: 255 255 255;
+    --shadow: 0 0 0;
+    color-scheme: dark;
+  }
+
+  /* ── Minimal / Skeleton ───────────────────────────── */
+  [data-theme="minimal"] {
+    --canvas: 248 248 250;
+    --surface: 255 255 255;
+    --surface-raised: 255 255 255;
+    --surface-overlay: 238 240 244;
+    --surface-hover: 226 229 235;
+    --fg: 22 24 30;
+    --fg-muted: 80 88 104;
+    --fg-subtle: 118 128 148;
+    --fg-faint: 166 175 192;
+    --line: 220 224 232;
+    --line-strong: 200 206 218;
+    --primary: 71 85 105;
+    --primary-hover: 51 65 85;
+    --primary-fg: 255 255 255;
+    --shadow: 22 24 30;
+    color-scheme: light;
+  }
+
   * {
     -webkit-tap-highlight-color: transparent;
     box-sizing: border-box;
@@ -117,6 +337,29 @@
       radial-gradient(1000px 620px at 50% -6%, rgb(var(--primary) / 0.16), transparent 55%),
       radial-gradient(760px 520px at 88% 6%, rgb(var(--info) / 0.10), transparent 50%),
       radial-gradient(680px 480px at 8% 30%, rgb(16 185 129 / 0.07), transparent 55%);
+  }
+
+  /* Aurora theme — animated shifting orbs */
+  [data-theme="aurora"] body::before {
+    background:
+      radial-gradient(900px 600px at 20% -10%, rgb(168 85 247 / 0.22), transparent 55%),
+      radial-gradient(700px 500px at 80% 10%, rgb(236 72 153 / 0.16), transparent 50%),
+      radial-gradient(600px 450px at 50% 60%, rgb(59 130 246 / 0.12), transparent 55%);
+    animation: auroraShift 8s ease-in-out infinite alternate;
+  }
+
+  /* Gold theme ambient */
+  [data-theme="gold"] body::before {
+    background:
+      radial-gradient(900px 500px at 50% -10%, rgb(245 197 24 / 0.12), transparent 55%),
+      radial-gradient(600px 400px at 85% 5%, rgb(251 146 60 / 0.08), transparent 50%);
+  }
+
+  /* Blue-dark theme ambient */
+  [data-theme="blue-dark"] body::before {
+    background:
+      radial-gradient(900px 580px at 50% -8%, rgb(96 165 250 / 0.14), transparent 55%),
+      radial-gradient(680px 480px at 86% 6%, rgb(147 197 253 / 0.08), transparent 50%);
   }
 
   /* Global accessible focus ring */
@@ -315,4 +558,16 @@ input[type='range'].slider-brand::-moz-range-thumb {
   0% { opacity: 0; transform: scale(0.8); }
   60% { opacity: 1; transform: scale(1.06); }
   100% { opacity: 1; transform: scale(1); }
+}
+@keyframes auroraShift {
+  0%   { background-position: 0% 50%; filter: hue-rotate(0deg); }
+  50%  { background-position: 100% 50%; filter: hue-rotate(30deg); }
+  100% { background-position: 0% 50%; filter: hue-rotate(-20deg); }
+}
+@keyframes flowDash {
+  to { stroke-dashoffset: -24; }
+}
+@keyframes nodePulse {
+  0%, 100% { r: 32; stroke-opacity: 0.12; }
+  50%       { r: 36; stroke-opacity: 0.28; }
 }

@@ -152,7 +152,7 @@ export function NewSessionPage() {
               })}
 
               {/* Inline add member */}
-              {showAddMember ? (
+              {currentUser?.role === 'admin' && showAddMember ? (
                 <div className="bg-surface border border-primary/30 rounded-xl px-4 py-3 space-y-2 animate-fade-in">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-xs font-medium text-fg-muted">Add member</p>
@@ -196,7 +196,7 @@ export function NewSessionPage() {
                     Add & Select
                   </button>
                 </div>
-              ) : (
+              ) : currentUser?.role === 'admin' ? (
                 <button
                   onClick={() => setShowAddMember(true)}
                   className="w-full flex items-center gap-2 rounded-xl border border-dashed border-line hover:border-primary/30 px-4 py-3 transition-all text-fg-subtle hover:text-fg-muted"
@@ -204,7 +204,7 @@ export function NewSessionPage() {
                   <UserPlus size={14} />
                   <span className="text-sm">Add new member</span>
                 </button>
-              )}
+              ) : null}
             </div>
 
             {selectedUserIds.length > 0 && (

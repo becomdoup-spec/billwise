@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, Loader2, ReceiptText, UserRound } from 'lucide-react'
 import { PinPad } from '../components/auth/PinPad'
+import { HoneycombGrid } from '../components/auth/HoneycombGrid'
 import { ThemeToggle } from '../components/shared/ThemeToggle'
 import { useAppStore } from '../store/appStore'
 import { hashPin } from '../services/calculations'
@@ -112,27 +113,12 @@ export function AuthPage() {
                 </button>
               </div>
             ) : regularUsers.length > 0 ? (
-              <div className="mt-10 sm:mt-14 flex flex-wrap justify-center gap-x-5 gap-y-8 sm:gap-x-8">
-                {regularUsers.map((user, index) => (
-                  <button
-                    key={user.id}
-                    onClick={() => selectMember(user.id)}
-                    className="group w-28 sm:w-36 focus:outline-none"
-                  >
-                    <span className={clsx(
-                      'aspect-square w-full rounded-3xl bg-gradient-to-br flex items-center justify-center border-2 border-transparent shadow-card transition-all duration-200 ease-spring',
-                      'group-hover:scale-105 group-hover:-translate-y-1 group-hover:shadow-raised group-focus-visible:scale-105',
-                      avatarStyles[index % avatarStyles.length],
-                    )}>
-                      <span className="text-4xl sm:text-5xl font-bold text-white/95 drop-shadow-md">
-                        {user.name.trim().charAt(0).toUpperCase()}
-                      </span>
-                    </span>
-                    <span className="block mt-3 text-sm sm:text-base text-fg-muted truncate transition-colors group-hover:text-fg">
-                      {user.name}
-                    </span>
-                  </button>
-                ))}
+              <div className="mt-8 sm:mt-10 w-full flex justify-center overflow-x-auto">
+                <HoneycombGrid
+                  users={regularUsers}
+                  avatarStyles={avatarStyles}
+                  onSelect={selectMember}
+                />
               </div>
             ) : (
               <div className="mt-12 mx-auto max-w-sm rounded-3xl border border-line bg-surface px-6 py-10 shadow-card">

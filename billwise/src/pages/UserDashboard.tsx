@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Clock, CheckCircle, Lock, Sparkles, Loader2 } from 'lucide-react'
+import { Clock, CheckCircle, Lock, Sparkles, Loader2, Plus } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
 import { useAppStore } from '../store/appStore'
@@ -27,7 +27,20 @@ export function UserDashboard() {
 
   return (
     <Layout>
-      <Header title="My Bills" subtitle={currentUser?.name} showLogout />
+      <Header
+        title="My Bills"
+        subtitle={currentUser?.name}
+        showLogout
+        rightAction={
+          <button
+            onClick={() => navigate('/user/new-session')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover rounded-xl text-xs font-semibold text-primary-fg transition-all active:scale-95"
+          >
+            <Plus size={13} />
+            New Bill
+          </button>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 animate-list">
         {mySessions.length === 0 ? (
