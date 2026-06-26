@@ -1,5 +1,7 @@
 import type { BillItem, ItemSelection, User, UserBillSummary } from '../types'
 
+export const PORTION_TOLERANCE = 0.01
+
 /**
  * Compute individual bill summary for every participant in a session.
  *
@@ -19,7 +21,7 @@ export function computeSplits(
   lockedParticipantIds: string[] = [],
   totalAmount?: number,
 ): UserBillSummary[] {
-  const payableItems = items.filter((item) => !isBillSummaryItemName(item.name))
+  const payableItems = getPayableBillItems(items)
   const participantCount = participants.length || 1
   const cgstShare = round(cgst / participantCount)
   const sgstShare = round(sgst / participantCount)
@@ -94,21 +96,52 @@ export function getFixedBillTotal(items: BillItem[], storedTotal?: number): numb
 
 /**
  * Returns true only when a session is genuinely complete:
- * ALL participants have locked AND every selectable item has at least one selector.
- * A session where some items have 0 selectors must stay in the outstanding/pending state.
+ * ALL participants have locked AND every payable item is allocated to exactly 100%.
  */
 export function isSessionComplete(
   session: { participantIds: string[]; lockedParticipantIds?: string[] },
   items: BillItem[],
   selections: ItemSelection[],
 ): boolean {
+  return getSessionCompletionState(session, items, selections).complete
+}
+
+export function getSessionCompletionState(
+  session: { participantIds: string[]; lockedParticipantIds?: string[] },
+  items: BillItem[],
+  selections: ItemSelection[],
+) {
   const { participantIds, lockedParticipantIds = [] } = session
-  if (participantIds.length === 0) return false
-  const everyoneLocked = participantIds.every((id) => lockedParticipantIds.includes(id))
-  if (!everyoneLocked) return false
-  const selectableItems = items.filter((item) => !isBillSummaryItemName(item.name))
-  if (selectableItems.length === 0) return true
-  return selectableItems.every((item) => selections.some((s) => s.itemId === item.id))
+  const everyoneLocked = participantIds.length > 0
+    && participantIds.every((id) => lockedParticipantIds.includes(id))
+  const payableItems = getPayableBillItems(items)
+  const allItemsAllocated = payableItems.length === 0
+    || payableItems.every((item) => isItemFullyAllocated(item, selections))
+
+  return {
+    everyoneLocked,
+    allItemsAllocated,
+    complete: everyoneLocked && allItemsAllocated,
+  }
+}
+
+export function getPayableBillItems(items: BillItem[]): BillItem[] {
+  return items.filter((item) => !isBillSummaryItemName(item.name))
+}
+
+export function isParticipantDone(
+  session: { lockedParticipantIds?: string[] },
+  userId: string,
+): boolean {
+  return (session.lockedParticipantIds ?? []).includes(userId)
+}
+
+export function isPortionFullyAllocated(portion: number): boolean {
+  return Math.abs(portion - 100) <= PORTION_TOLERANCE
+}
+
+export function isItemFullyAllocated(item: BillItem, selections: ItemSelection[]): boolean {
+  return isPortionFullyAllocated(getAllocatedPortion(selections.filter((selection) => selection.itemId === item.id)))
 }
 
 export function isBillSummaryItemName(name: string): boolean {

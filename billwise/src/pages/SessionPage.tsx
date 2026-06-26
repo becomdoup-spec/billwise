@@ -12,7 +12,8 @@ import { ItemCard } from '../components/bill/ItemCard'
 import { useAppStore } from '../store/appStore'
 import {
   computeSplits, getItemPortionCoverage, formatCurrency,
-  getFixedBillTotal, isBillSummaryItemName,
+  getFixedBillTotal, getSessionCompletionState, isBillSummaryItemName,
+  isParticipantDone, isPortionFullyAllocated,
 } from '../services/calculations'
 import { toast } from '../components/shared/Toast'
 import { Modal } from '../components/shared/Modal'
@@ -59,10 +60,12 @@ export function SessionPage() {
     </Layout>
   )
 
-  const isSessionLocked = session.status === 'completed'
   const items = billItems[session.id] ?? []
   const participants = users.filter((u) => session.participantIds.includes(u.id))
   const sessionSelections = selections.filter((s) => s.sessionId === session.id)
+  const completionState = getSessionCompletionState(session, items, sessionSelections)
+  const isSessionComplete = completionState.complete
+  const isSessionLocked = isSessionComplete
 
   const viewingUserId = currentUser?.id ?? ''
   const selectionUserId = isAdmin && editingUserId ? editingUserId : viewingUserId
@@ -87,17 +90,19 @@ export function SessionPage() {
     session.totalAmount,
   )
   const coverage = getItemPortionCoverage(selectableItems, sessionSelections)
+  const hasCoverageIssues = selectableItems.some((item) =>
+    !isPortionFullyAllocated(coverage[item.id] ?? 0),
+  )
   const nonParticipants = users.filter((u) => u.role === 'user' && !session.participantIds.includes(u.id))
 
-  // All-locked state — triggers final split reveal
+  // Keep participant status aligned with the same completion semantics as the store.
   const lockStatus = participants.map((p) => {
     const pSels = sessionSelections.filter((s) => s.userId === p.id)
-    const isLocked = (session.lockedParticipantIds ?? []).includes(p.id)
-    // Locked with 0 item selections = treated as pending — they haven't claimed anything
-    const isDone = isLocked && pSels.length > 0
+    const isLocked = isParticipantDone(session, p.id)
+    const isDone = isLocked
     return { user: p, locked: isLocked, done: isDone, count: pSels.length }
   })
-  const allParticipantsLocked = participants.length > 0 && lockStatus.every((x) => x.done)
+  const allParticipantsLocked = completionState.everyoneLocked
   const hasBillImage = Boolean(session.billImageBase64 || session.billImageUrl)
 
   const handleViewBillImage = async () => {
@@ -169,6 +174,10 @@ export function SessionPage() {
   ).length
 
   const exportImage = async () => {
+    if (!isSessionComplete) {
+      toast.error('Final split needs all members locked and every item allocated')
+      return
+    }
     setExporting('image')
     try {
       await downloadSplitImage(session, splits)
@@ -181,6 +190,10 @@ export function SessionPage() {
   }
 
   const exportPdf = async () => {
+    if (!isSessionComplete) {
+      toast.error('Final split needs all members locked and every item allocated')
+      return
+    }
     setExporting('pdf')
     try {
       await downloadSplitPdf(session, splits)
@@ -270,10 +283,7 @@ export function SessionPage() {
         {tab === 'items' && (
           <div className="pb-32">
             {/* Coverage warning */}
-            {isAdmin && selectableItems.some((item) => {
-              const cov = coverage[item.id] ?? 0
-              return cov > 100.01 || (cov < 99.99 && cov > 0)
-            }) && (
+            {isAdmin && hasCoverageIssues && (
               <div className="mx-4 mt-3">
                 <button
                   onClick={() => setExpandCoverage((v) => !v)}
@@ -287,7 +297,7 @@ export function SessionPage() {
                   <div className="mt-2 space-y-1">
                     {selectableItems.map((item) => {
                       const cov = coverage[item.id] ?? 0
-                      if (cov === 0 || (cov >= 99.99 && cov <= 100.01)) return null
+                      if (isPortionFullyAllocated(cov)) return null
                       return (
                         <div key={item.id} className="flex items-center justify-between bg-surface rounded-lg px-3 py-2 text-xs">
                           <span className="text-fg-muted truncate flex-1">{item.name}</span>
@@ -486,7 +496,7 @@ export function SessionPage() {
             <div className="bg-surface border border-line rounded-2xl overflow-hidden">
               <div className="px-4 py-3 border-b border-line flex items-center justify-between">
                 <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Who's locked in</p>
-                {allParticipantsLocked && (
+                {isSessionComplete && (
                   <span className="text-[10px] text-success font-semibold flex items-center gap-1">
                     <CheckCircle size={10} /> All done
                   </span>
@@ -511,7 +521,7 @@ export function SessionPage() {
                     </div>
                     {user.id === viewingUserId ? 'You' : user.name.split(' ')[0]}
                     <span className="opacity-70">
-                      · {done ? 'Done' : locked && count === 0 ? 'No items' : 'Pending'}
+                      · {done ? 'Done' : locked && count === 0 ? 'Locked' : 'Pending'}
                     </span>
                     {done
                       ? <Lock size={9} />
@@ -524,8 +534,8 @@ export function SessionPage() {
               </div>
             </div>
 
-            {/* Final split — only when everyone locked */}
-            {allParticipantsLocked ? (
+            {/* Final split — only when everyone locked and all items are fully allocated */}
+            {isSessionComplete ? (
               <div className="animate-fade-in space-y-3 animate-list">
                 <div className="flex items-center justify-between gap-3 px-1">
                   <div className="flex items-center gap-2">
@@ -607,9 +617,15 @@ export function SessionPage() {
             ) : (
               <div className="text-center py-8 bg-surface border border-line rounded-2xl">
                 <Clock size={20} className="text-fg-faint mx-auto mb-2" />
-                <p className="text-sm font-medium text-fg-muted">Waiting for everyone to lock</p>
+                <p className="text-sm font-medium text-fg-muted">
+                  {allParticipantsLocked && !completionState.allItemsAllocated
+                    ? 'Some items need portion review'
+                    : 'Waiting for everyone to lock'}
+                </p>
                 <p className="text-xs text-fg-faint mt-1">
-                  {lockStatus.filter(x => x.locked).length}/{participants.length} locked in
+                  {allParticipantsLocked && !completionState.allItemsAllocated
+                    ? 'Adjust portions until every item is 100% allocated'
+                    : `${lockStatus.filter(x => x.locked).length}/${participants.length} locked in`}
                 </p>
               </div>
             )}
@@ -622,9 +638,8 @@ export function SessionPage() {
             <p className="text-xs font-medium text-fg-subtle uppercase tracking-wider">Participants ({participants.length})</p>
             {participants.map((user) => {
               const userSels = sessionSelections.filter((s) => s.userId === user.id)
-              const isUserLocked = (session.lockedParticipantIds ?? []).includes(user.id)
-              // Locked with 0 selections = still "pending" — hasn't claimed anything
-              const isUserDone = isUserLocked && userSels.length > 0
+              const isUserLocked = isParticipantDone(session, user.id)
+              const isUserDone = isUserLocked
               const userSplit = splits.find((s) => s.userId === user.id)
 
               return (
@@ -641,7 +656,7 @@ export function SessionPage() {
                           ? 'bg-success/10 border-success/25 text-success'
                           : 'bg-warning/10 border-warning/25 text-warning',
                       )}>
-                        {isUserDone ? 'Done' : isUserLocked ? 'No items' : 'Pending'}
+                        {isUserDone ? 'Done' : isUserLocked ? 'Locked' : 'Pending'}
                       </span>
                     </div>
                     <p className="text-xs text-fg-subtle mt-0.5">
@@ -756,7 +771,7 @@ export function SessionPage() {
       )}
 
       {/* My total bar when on split tab */}
-      {tab === 'split' && !isAdmin && allParticipantsLocked && (
+      {tab === 'split' && !isAdmin && isSessionComplete && (
         <div className="border-t border-line bg-canvas/95 backdrop-blur-sm px-4 py-4 pb-safe">
           <div className="flex items-center justify-between">
             <span className="text-sm text-fg-muted">Your total</span>

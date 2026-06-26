@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { User, Session, BillItem, ItemSelection } from '../types'
-import { generateId, hashPin } from '../services/calculations'
+import { generateId, getSessionCompletionState, hashPin } from '../services/calculations'
 import {
   dbFindUserByPin, dbCreateUser, dbUpdateUserPin, dbDeleteUser, dbGetUsers,
   dbCreateSession, dbUpdateSession, dbDeleteSession, dbUploadBillImage, dbAddParticipant, dbRemoveParticipant,
@@ -10,7 +10,6 @@ import {
 } from '../lib/db'
 import { applyAdminDefaultTheme } from './themeStore'
 import type { Theme } from './themeStore'
-import { isBillSummaryItemName } from '../services/calculations'
 import { supabase } from '../lib/supabase'
 
 interface AppStore {
@@ -208,7 +207,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
             'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)],
           ).join(''),
           status: 'active',
-          isPublic: true,
+	          isPublic: data.isPublic,
           participantIds: [],
           lockedParticipantIds: [],
           createdAt: new Date().toISOString(),
@@ -386,67 +385,73 @@ export const useAppStore = create<AppStore>((set, get) => ({
         }))
       },
 
-      lockUserSelections: async (sessionId, userId) => {
-        requireCloudConnection()
-        const now = new Date().toISOString()
-        await dbLockUserSelections(sessionId, userId, now)
-        set((s) => {
-          // Check if every selectable item has at least one selector — only then auto-complete
-          const sessionItems = (s.billItems[sessionId] ?? []).filter(
-            (item) => !isBillSummaryItemName(item.name),
-          )
-          const sessionSels = s.selections.filter((sel) => sel.sessionId === sessionId)
-          const allItemsCovered = sessionItems.length === 0 || sessionItems.every(
-            (item) => sessionSels.some((sel) => sel.itemId === item.id),
-          )
+	      lockUserSelections: async (sessionId, userId) => {
+	        requireCloudConnection()
+	        const now = new Date().toISOString()
+	        await dbLockUserSelections(sessionId, userId, now)
+	        set((s) => {
+	          let sessionPatch: Partial<Session> | null = null
+	          const nextSelections = s.selections.map((sel) =>
+	            sel.sessionId === sessionId && sel.userId === userId
+	              ? { ...sel, lockedAt: now }
+	              : sel,
+	          )
+	          const sessionItems = s.billItems[sessionId] ?? []
+	          const sessionSels = nextSelections.filter((sel) => sel.sessionId === sessionId)
 
-          const updatedSessions = s.sessions.map((sess) => {
-            if (sess.id !== sessionId) return sess
-            const newLocked = [...new Set([...(sess.lockedParticipantIds ?? []), userId])]
-            const everyoneFinished = sess.participantIds.length > 0 && newLocked.length >= sess.participantIds.length
-            // Only mark completed if all participants locked AND all items have at least one selector
-            const allDone = everyoneFinished && allItemsCovered
-            return {
-              ...sess,
-              lockedParticipantIds: newLocked,
-              ...(allDone && !sess.completedAt ? { completedAt: now, status: 'completed' as const } : {}),
-            }
-          })
-          // persist completedAt to DB if we just completed
-          const updated = updatedSessions.find((s) => s.id === sessionId)
-          if (updated?.completedAt === now) {
-            dbUpdateSession(sessionId, { completedAt: now, status: 'completed' }).catch(console.error)
-          }
-          return {
-            sessions: updatedSessions,
-            selections: s.selections.map((sel) =>
-              sel.sessionId === sessionId && sel.userId === userId
-                ? { ...sel, lockedAt: now }
-                : sel,
-            ),
-          }
-        })
-      },
+	          const updatedSessions = s.sessions.map((sess) => {
+	            if (sess.id !== sessionId) return sess
+	            const newLocked = [...new Set([...(sess.lockedParticipantIds ?? []), userId])]
+	            const candidate = {
+	              ...sess,
+	              lockedParticipantIds: newLocked,
+	            }
+	            const completion = getSessionCompletionState(candidate, sessionItems, sessionSels)
 
-      unlockUserSelections: async (sessionId, userId) => {
-        requireCloudConnection()
-        await dbUnlockUserSelections(sessionId, userId)
-        set((s) => ({
-          sessions: s.sessions.map((sess) => {
-            if (sess.id !== sessionId) return sess
-            const newLocked = (sess.lockedParticipantIds ?? []).filter((id) => id !== userId)
-            // If session was completed but a user is now unlocked, revert it to active so it
-            // appears in the pending section again for all participants.
-            const needsRevert = sess.status === 'completed'
-            if (needsRevert) {
-              dbUpdateSession(sessionId, { status: 'active', completedAt: undefined }).catch(console.error)
-            }
-            return {
-              ...sess,
-              lockedParticipantIds: newLocked,
-              ...(needsRevert ? { status: 'active' as const, completedAt: undefined } : {}),
-            }
-          }),
+	            if (completion.complete) {
+	              const completedAt = sess.completedAt ?? now
+	              sessionPatch = { completedAt, status: 'completed' }
+	              return { ...candidate, completedAt, status: 'completed' as const }
+	            }
+
+	            if (sess.status === 'completed' || sess.completedAt) {
+	              sessionPatch = { completedAt: null, status: 'active' }
+	              return { ...candidate, completedAt: null, status: 'active' as const }
+	            }
+
+	            return candidate
+	          })
+
+	          if (sessionPatch) {
+	            dbUpdateSession(sessionId, sessionPatch).catch(console.error)
+	          }
+
+	          return {
+	            sessions: updatedSessions,
+	            selections: nextSelections,
+	          }
+	        })
+	      },
+
+	      unlockUserSelections: async (sessionId, userId) => {
+	        requireCloudConnection()
+	        await dbUnlockUserSelections(sessionId, userId)
+	        set((s) => ({
+	          sessions: s.sessions.map((sess) => {
+	            if (sess.id !== sessionId) return sess
+	            const newLocked = (sess.lockedParticipantIds ?? []).filter((id) => id !== userId)
+	            // If session was completed but a user is now unlocked, revert it to active so it
+	            // appears in the pending section again for all participants.
+	            const needsRevert = sess.status === 'completed' || Boolean(sess.completedAt)
+	            if (needsRevert) {
+	              dbUpdateSession(sessionId, { status: 'active', completedAt: null }).catch(console.error)
+	            }
+	            return {
+	              ...sess,
+	              lockedParticipantIds: newLocked,
+	              ...(needsRevert ? { status: 'active' as const, completedAt: null } : {}),
+	            }
+	          }),
           selections: s.selections.map((sel) =>
             sel.sessionId === sessionId && sel.userId === userId
               ? { ...sel, lockedAt: undefined }

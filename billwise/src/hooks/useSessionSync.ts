@@ -52,6 +52,7 @@ export function useSessionSync(sessionId: string | undefined) {
             isPublic: Boolean(r.is_public),
             billImageUrl: r.bill_image_url as string | undefined,
             totalAmount: Number(r.total_amount),
+            completedAt: (r.completed_at as string | null) ?? null,
           })
         },
       )

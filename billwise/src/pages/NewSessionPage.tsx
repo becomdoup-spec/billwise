@@ -14,7 +14,10 @@ type Step = 'upload' | 'participants'
 
 export function NewSessionPage() {
   const navigate = useNavigate()
-  const { currentUser, users, createSession, addParticipant, setBillItems, saveBillImage, addUser } = useAppStore()
+  const {
+    currentUser, users, createSession, addParticipant, setBillItems,
+    saveBillImage, addUser, updateSession, deleteSession,
+  } = useAppStore()
   const [step, setStep] = useState<Step>('upload')
   const [parsedBill, setParsedBill] = useState<ParsedBill | null>(null)
   const [imageDataUrl, setImageDataUrl] = useState('')
@@ -47,18 +50,20 @@ export function NewSessionPage() {
     if (isCreating) return
 
     setIsCreating(true)
+    let createdSessionId = ''
     try {
       const session = await createSession({
         restaurantName: parsedBill.restaurantName,
         date: parsedBill.date,
         billImageBase64: imageDataUrl,
-        isPublic: true,
+        isPublic: false,
         subtotal: parsedBill.subtotal,
         cgst: parsedBill.cgst,
         sgst: parsedBill.sgst,
         totalAmount: parsedBill.totalAmount,
         createdBy: currentUser?.id ?? '',
       })
+      createdSessionId = session.id
 
       await Promise.all(selectedUserIds.map((uid) => addParticipant(session.id, uid)))
 
@@ -69,10 +74,14 @@ export function NewSessionPage() {
       }))
       await setBillItems(session.id, billItems)
       if (imageDataUrl) await saveBillImage(session.id, imageDataUrl)
+      await updateSession(session.id, { isPublic: true })
 
       toast.success(`Session created — ${session.orderId}`)
       navigate(`/session/${session.id}`)
     } catch {
+      if (createdSessionId) {
+        deleteSession(createdSessionId).catch(() => undefined)
+      }
       toast.error('Session could not be saved. Check the Supabase connection and try again.')
       setIsCreating(false)
     }

@@ -6,7 +6,7 @@ import { Header } from '../components/shared/Header'
 import { Modal } from '../components/shared/Modal'
 import { toast } from '../components/shared/Toast'
 import { useAppStore } from '../store/appStore'
-import { formatCurrency, computeSplits, isSessionComplete } from '../services/calculations'
+import { formatCurrency, computeSplits, isParticipantDone, isSessionComplete } from '../services/calculations'
 import clsx from 'clsx'
 import type { Session, User } from '../types'
 
@@ -201,11 +201,10 @@ function BillCard({
 }) {
   const participants = users.filter((u) => session.participantIds.includes(u.id))
   const lockedIds = session.lockedParticipantIds ?? []
-  const isParticipantDone = (uid: string) =>
-    lockedIds.includes(uid) && sessionSelections.some((s) => s.userId === uid)
-  const doneCount = participants.filter((p) => isParticipantDone(p.id)).length
+  const participantDone = (uid: string) => isParticipantDone(session, uid)
+  const doneCount = participants.filter((p) => participantDone(p.id)).length
   const allLocked = participants.length > 0 && doneCount === participants.length
-  const iMeLocked = isParticipantDone(currentUser?.id ?? '')
+  const iMeLocked = participantDone(currentUser?.id ?? '')
 
   const splits = computeSplits(
     billItems,
@@ -286,7 +285,7 @@ function BillCard({
       <div className="flex items-center gap-1.5 mb-3 flex-wrap">
         {participants.map((p, i) => {
           const locked = lockedIds.includes(p.id)
-          const done = isParticipantDone(p.id)
+          const done = participantDone(p.id)
           const isMe = p.id === currentUser?.id
           return (
             <div
@@ -329,7 +328,7 @@ function BillCard({
             </span>
           ) : allLocked ? (
             <span className="flex items-center gap-1 text-xs text-success">
-              <CheckCircle size={10} /> All locked — calculating…
+              <CheckCircle size={10} /> All locked · review item portions
             </span>
           ) : iMeLocked ? (
             <span className="flex items-center gap-1 text-xs text-success">

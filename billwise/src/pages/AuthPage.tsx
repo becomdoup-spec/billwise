@@ -9,7 +9,7 @@ import { PinPad } from '../components/auth/PinPad'
 import { HoneycombGrid } from '../components/auth/HoneycombGrid'
 import { ThemeToggle } from '../components/shared/ThemeToggle'
 import { useAppStore } from '../store/appStore'
-import { hashPin, formatCurrency, computeSplits, isSessionComplete } from '../services/calculations'
+import { hashPin, formatCurrency, computeSplits, isParticipantDone, isSessionComplete } from '../services/calculations'
 import clsx from 'clsx'
 import type { Session, User } from '../types'
 
@@ -196,7 +196,6 @@ export function AuthPage() {
                             key={session.id}
                             session={session}
                             users={users}
-                            sessionSelections={selections.filter((s) => s.sessionId === session.id)}
                             variant="outstanding"
                             onPickMember={(userId) => {
                               setBillPickerSession(null)
@@ -223,12 +222,11 @@ export function AuthPage() {
                         <div className="space-y-2">
                           {completedBills.map((session) => (
                             <LandingBillCard
-                              key={session.id}
-                              session={session}
-                              users={users}
-                              sessionSelections={selections.filter((s) => s.sessionId === session.id)}
-                              variant="completed"
-                              onPickMember={(userId) => setSplitPopup({ session, userId })}
+                            key={session.id}
+                            session={session}
+                            users={users}
+                            variant="completed"
+                            onPickMember={(userId) => setSplitPopup({ session, userId })}
                             />
                           ))}
                         </div>
@@ -311,21 +309,19 @@ export function AuthPage() {
 // ── Landing bill card ──────────────────────────────────────────────
 
 function LandingBillCard({
-  session, users, sessionSelections, onPickMember, variant = 'outstanding',
+  session, users, onPickMember, variant = 'outstanding',
 }: {
   session: Session
   users: User[]
-  sessionSelections: import('../types').ItemSelection[]
   onPickMember: (userId: string) => void
   variant?: 'outstanding' | 'completed'
 }) {
   const [expanded, setExpanded] = useState(false)
   const participants = users.filter((u) => session.participantIds.includes(u.id))
-  const lockedIds = session.lockedParticipantIds ?? []
-  const isParticipantDone = (uid: string) =>
-    lockedIds.includes(uid) && sessionSelections.some((s) => s.userId === uid)
-  const doneCount = participants.filter((p) => isParticipantDone(p.id)).length
-  const pendingParticipants = participants.filter((p) => !isParticipantDone(p.id))
+  const participantDone = (uid: string) => isParticipantDone(session, uid)
+  const doneCount = participants.filter((p) => participantDone(p.id)).length
+  const pendingParticipants = participants.filter((p) => !participantDone(p.id))
+  const visibleParticipants = pendingParticipants.length > 0 ? pendingParticipants : participants
 
   const isCompleted = variant === 'completed'
 
@@ -363,7 +359,7 @@ function LandingBillCard({
         <div className="flex items-center gap-1.5 pl-8">
           <div className="flex -space-x-1">
             {participants.slice(0, 5).map((p, i) => {
-              const done = isParticipantDone(p.id)
+              const done = participantDone(p.id)
               return (
                 <div
                   key={p.id}
@@ -427,7 +423,7 @@ function LandingBillCard({
             <>
               <p className="text-[9px] text-fg-faint uppercase tracking-wider mb-2">Tap your name</p>
               <div className="flex flex-wrap gap-1.5">
-                {pendingParticipants.map((p, i) => (
+                {visibleParticipants.map((p, i) => (
                   <button
                     key={p.id}
                     onClick={() => onPickMember(p.id)}
@@ -556,6 +552,7 @@ function BillMemberPickerModal({
 }) {
   const participants = users.filter((u) => session.participantIds.includes(u.id))
   const pending = participants.filter((p) => !(session.lockedParticipantIds ?? []).includes(p.id))
+  const choices = pending.length > 0 ? pending : participants
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -567,7 +564,7 @@ function BillMemberPickerModal({
         <p className="text-sm font-semibold text-fg mb-1">{session.restaurantName || 'Unnamed Bill'}</p>
         <p className="text-xs text-fg-subtle mb-4">Who are you?</p>
         <div className="space-y-2">
-          {pending.map((p, i) => (
+          {choices.map((p, i) => (
             <button
               key={p.id}
               onClick={() => onSelect(p.id)}

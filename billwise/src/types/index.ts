@@ -36,7 +36,7 @@ export interface Session {
   totalAmount: number
   createdBy: string
   createdAt: string
-  completedAt?: string        // set when all participants lock in
+  completedAt?: string | null // set when all participants lock in, null when reopened
   participantIds: string[]
   lockedParticipantIds: string[]
 }

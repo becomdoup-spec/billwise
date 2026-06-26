@@ -48,9 +48,8 @@ export function useSupabaseInit() {
         // Keep this last: selectionsReady means every split input is hydrated.
         hydrateSelectionsFromSupabase(selections)
 
-        // Auto-revert sessions that are marked "completed" in the DB but have
-        // unallocated items (no selector). This corrects data that was saved before
-        // the coverage-gate was introduced.
+        // Auto-revert sessions that are marked "completed" in the DB but are
+        // no longer fully locked and allocated.
         const itemsBySession = items.reduce<Record<string, BillItem[]>>((acc, item) => {
           ;(acc[item.sessionId] ??= []).push(item)
           return acc
@@ -64,7 +63,7 @@ export function useSupabaseInit() {
           .forEach((s) => {
             const trulyDone = isSessionComplete(s, itemsBySession[s.id] ?? [], selsBySession[s.id] ?? [])
             if (!trulyDone) {
-              dbUpdateSession(s.id, { status: 'active', completedAt: undefined }).catch(console.error)
+              dbUpdateSession(s.id, { status: 'active', completedAt: null }).catch(console.error)
             }
           })
       } catch (error) {

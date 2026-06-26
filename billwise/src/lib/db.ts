@@ -36,7 +36,7 @@ function rowToSession(
     totalAmount: Number(r.total_amount),
     createdBy: (r.created_by as string) ?? '',
     createdAt: r.created_at as string,
-    completedAt: r.completed_at as string | undefined,
+    completedAt: (r.completed_at as string | null) ?? null,
     participantIds,
     lockedParticipantIds,
   }
@@ -207,7 +207,12 @@ export async function dbDeleteSession(id: string): Promise<void> {
 
 export async function dbAddParticipant(sessionId: string, userId: string): Promise<void> {
   if (!supabase) return
-  const { error } = await supabase.from('session_participants').upsert({ session_id: sessionId, user_id: userId })
+  const { error } = await supabase
+    .from('session_participants')
+    .upsert(
+      { session_id: sessionId, user_id: userId },
+      { onConflict: 'session_id,user_id' },
+    )
   if (error) { console.error('[db] addParticipant', error); throw error }
 }
 
@@ -298,14 +303,16 @@ export async function dbGetAllSelections(): Promise<ItemSelection[]> {
 
 export async function dbUpsertSelection(sel: ItemSelection): Promise<void> {
   if (!supabase) return
-  const { error } = await supabase.from('item_selections').upsert({
-    id: sel.id,
-    session_id: sel.sessionId,
-    user_id: sel.userId,
-    item_id: sel.itemId,
-    portion_percentage: sel.portionPercentage,
-    locked_at: sel.lockedAt ?? null,
-  })
+  const { error } = await supabase
+    .from('item_selections')
+    .upsert({
+      id: sel.id,
+      session_id: sel.sessionId,
+      user_id: sel.userId,
+      item_id: sel.itemId,
+      portion_percentage: sel.portionPercentage,
+      locked_at: sel.lockedAt ?? null,
+    }, { onConflict: 'session_id,user_id,item_id' })
   if (error) { console.error('[db] upsertSelection', error); throw error }
 }
 

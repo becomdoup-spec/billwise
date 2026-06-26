@@ -5,12 +5,15 @@
 1. Go to https://supabase.com → New project
 2. Note your **Project URL** and **anon public key** from Settings → API
 
-## Step 2: Add keys to .env
+## Step 2: App configuration
 
-Create a `.env` file in the project root:
+BillWise intentionally uses one fixed Supabase project for local and production
+so the tested backend is the same backend that goes live. The public Supabase URL
+and publishable key live in `src/lib/supabase.ts`.
+
+Only add a `.env` file if you use the optional AI bill parser:
 ```
-VITE_SUPABASE_URL=https://xxxxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGci...
+VITE_OPENROUTER_API_KEY=...
 ```
 
 ## Step 3: Run the SQL below in Supabase SQL Editor
@@ -54,14 +57,19 @@ create table public.sessions (
   subtotal          numeric(10,2) not null default 0,
   cgst              numeric(10,2) not null default 0,
   sgst              numeric(10,2) not null default 0,
-  total_amount      numeric(10,2) not null default 0,
-  created_by        uuid references public.users(id) on delete set null,
-  created_at        timestamptz default now()
-);
+	  total_amount      numeric(10,2) not null default 0,
+	  created_by        uuid references public.users(id) on delete set null,
+	  created_at        timestamptz default now(),
+	  completed_at      timestamptz
+	);
 
 -- Existing projects: run this once if sessions were created before visibility controls.
 alter table public.sessions
   add column if not exists is_public boolean not null default true;
+
+-- Existing projects: run this once to support completed-bill expiry and reopening.
+alter table public.sessions
+  add column if not exists completed_at timestamptz;
 
 -- ============================================================
 -- BILL ITEMS
@@ -129,6 +137,22 @@ create trigger item_selections_updated_at
   for each row execute function update_updated_at();
 
 -- ============================================================
+-- APP SETTINGS
+-- ============================================================
+create table if not exists public.app_settings (
+  key        text primary key,
+  value      text not null,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.app_settings (key, value)
+values
+  ('require_pin', 'true'),
+  ('show_completed_bills', 'true'),
+  ('default_theme', 'light')
+on conflict (key) do nothing;
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
 alter table public.users               enable row level security;
@@ -136,6 +160,7 @@ alter table public.sessions            enable row level security;
 alter table public.bill_items          enable row level security;
 alter table public.session_participants enable row level security;
 alter table public.item_selections     enable row level security;
+alter table public.app_settings        enable row level security;
 
 -- For simplicity, allow anon reads (the PIN acts as the auth layer).
 -- In production, use Supabase Auth + proper RLS.
@@ -144,6 +169,11 @@ create policy "allow all anon" on public.sessions            for all using (true
 create policy "allow all anon" on public.bill_items          for all using (true);
 create policy "allow all anon" on public.session_participants for all using (true);
 create policy "allow all anon" on public.item_selections     for all using (true);
+create policy "allow all anon" on public.app_settings        for all using (true) with check (true);
+
+-- Realtime DELETE payloads need old row values for local cleanup.
+alter table public.item_selections replica identity full;
+alter table public.session_participants replica identity full;
 
 -- ============================================================
 -- HELPFUL VIEWS
