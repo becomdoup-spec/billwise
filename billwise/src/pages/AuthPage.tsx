@@ -123,8 +123,8 @@ export function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col px-6 py-8 sm:py-12">
-      <div className="w-full max-w-5xl mx-auto flex items-center justify-between">
+    <div className="flex h-[100dvh] min-h-[100svh] flex-col overflow-hidden px-4 py-4 sm:px-6 sm:py-8">
+      <div className="mx-auto flex w-full max-w-5xl shrink-0 items-center justify-between">
         <button
           onClick={openAdminAccess}
           className="group inline-flex items-center gap-2.5 rounded-xl"
@@ -140,7 +140,7 @@ export function AuthPage() {
         <ThemeToggle />
       </div>
 
-      <main className="flex-1 flex items-center justify-center w-full py-10">
+      <main className="flex min-h-0 w-full flex-1 items-start justify-center overflow-y-auto py-6 sm:items-center sm:py-10">
         {step === 'profiles' ? (
           <div className="w-full max-w-4xl text-center animate-fade-in">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary mb-3">Shared moments. Fair splits.</p>
@@ -182,7 +182,7 @@ export function AuthPage() {
             {/* Bills sections — two-column layout */}
             {cloudReady && !cloudSyncError && (outstandingBills.length > 0 || (showCompletedBills && completedBills.length > 0)) && (
               <div className="mt-10 w-full max-w-2xl mx-auto text-left">
-                <div className={clsx('grid gap-4', showCompletedBills ? 'grid-cols-2' : 'grid-cols-1')}>
+                <div className={clsx('grid gap-4', showCompletedBills ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1')}>
                   {/* Left column — Outstanding */}
                   <div>
                     <div className="flex items-center gap-1.5 mb-3">
@@ -477,7 +477,7 @@ function SplitPopupModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm bg-surface rounded-3xl border border-line shadow-2xl overflow-hidden animate-slide-up">
+      <div className="relative w-full max-w-sm bg-surface rounded-3xl border border-line shadow-2xl overflow-hidden animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-line">
           <div className="flex items-center gap-3">
@@ -555,9 +555,9 @@ function BillMemberPickerModal({
   const choices = pending.length > 0 ? pending : participants
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm mx-4 bg-surface rounded-3xl border border-line shadow-2xl p-6 animate-slide-up">
+      <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-3xl border border-line bg-surface p-6 shadow-2xl animate-scale-in">
         <button onClick={onClose} className="absolute top-4 right-4 text-fg-faint hover:text-fg-muted p-1">
           <X size={18} />
         </button>

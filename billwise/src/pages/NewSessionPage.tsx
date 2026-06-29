@@ -103,7 +103,7 @@ export function NewSessionPage() {
       <Header title="New Session" back showExit />
 
       {/* Progress steps */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
+      <div className="flex shrink-0 items-center gap-2 px-4 py-3 border-b border-line">
         {(['upload', 'participants'] as const).map((s, idx) => (
           <div key={s} className="flex items-center gap-2">
             {idx > 0 && <div className="w-6 h-px bg-line-strong" />}
@@ -127,7 +127,7 @@ export function NewSessionPage() {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {step === 'upload' && (
           <div className="animate-fade-in">
             <div className="mb-4 rounded-xl border border-line bg-surface px-4 py-3">

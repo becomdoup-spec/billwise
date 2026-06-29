@@ -41,7 +41,7 @@ export function AdminDashboard() {
       <Header title="BillWise Admin" subtitle={currentUser?.name} showLogout />
 
       {/* Tabs */}
-      <div className="flex border-b border-line px-4 gap-1 pt-1">
+      <div className="flex shrink-0 border-b border-line px-4 gap-1 pt-1">
         {([
           { id: 'sessions', label: 'Sessions', icon: Receipt },
           { id: 'users', label: 'Members', icon: Users },
@@ -61,7 +61,7 @@ export function AdminDashboard() {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {tab === 'sessions' && (
           <div className="p-4 space-y-4">
             {/* New session CTA */}

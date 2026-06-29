@@ -24,7 +24,7 @@ export function Modal({ open, onClose, title, children, size = 'md', dismissible
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -33,8 +33,8 @@ export function Modal({ open, onClose, title, children, size = 'md', dismissible
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
         onClick={dismissible ? onClose : undefined}
       />
-      <div className={`relative w-full ${widths[size]} bg-surface-raised rounded-3xl border border-line shadow-overlay animate-slide-up overflow-hidden`}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+      <div className={`relative flex max-h-[calc(100dvh-2rem)] w-full ${widths[size]} flex-col overflow-hidden rounded-3xl border border-line bg-surface-raised shadow-overlay animate-scale-in`}>
+        <div className="flex shrink-0 items-center justify-between px-5 py-4 border-b border-line">
           <h2 className="text-base font-semibold text-fg tracking-tight">{title}</h2>
           {dismissible && (
             <button
@@ -46,7 +46,7 @@ export function Modal({ open, onClose, title, children, size = 'md', dismissible
             </button>
           )}
         </div>
-        <div className="p-5">{children}</div>
+        <div className="overflow-y-auto overscroll-contain p-5">{children}</div>
       </div>
     </div>
   )

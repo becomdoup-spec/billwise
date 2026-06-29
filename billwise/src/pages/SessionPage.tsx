@@ -379,7 +379,7 @@ export function SessionPage() {
       />
 
       {/* Bill summary bar */}
-      <div className="flex items-center gap-4 px-4 py-3 bg-surface border-b border-line">
+      <div className="flex shrink-0 items-center gap-4 px-4 py-3 bg-surface border-b border-line">
         <div className="flex-1">
           <p className="text-xs text-fg-subtle">Invoice total</p>
           <p className="text-base font-bold text-primary">{formatCurrency(fixedBillTotal)}</p>
@@ -398,7 +398,7 @@ export function SessionPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-line px-4 gap-1">
+      <div className="flex shrink-0 border-b border-line px-4 gap-1">
         {([
           { id: 'items', label: 'Items', icon: Receipt },
           { id: 'split', label: 'Split', icon: BarChart3 },
@@ -420,7 +420,7 @@ export function SessionPage() {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Items tab */}
         {tab === 'items' && (
           <div className="pb-32">
@@ -829,7 +829,7 @@ export function SessionPage() {
 
       {/* Bottom action bar */}
       {!isAdmin && !isSessionLocked && tab === 'items' && !myLocked && (
-        <div className="border-t border-line bg-canvas/95 backdrop-blur-sm px-4 py-3 pb-safe">
+        <div className="shrink-0 border-t border-line bg-canvas/95 backdrop-blur-sm px-4 py-3 pb-safe">
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-fg-subtle">
               <span>{mySelections.length} item{mySelections.length !== 1 ? 's' : ''} selected</span>
@@ -847,7 +847,7 @@ export function SessionPage() {
 
       {/* My total bar when on split tab */}
       {tab === 'split' && !isAdmin && isSessionComplete && (
-        <div className="border-t border-line bg-canvas/95 backdrop-blur-sm px-4 py-4 pb-safe">
+        <div className="shrink-0 border-t border-line bg-canvas/95 backdrop-blur-sm px-4 py-4 pb-safe">
           <div className="flex items-center justify-between">
             <span className="text-sm text-fg-muted">Your total</span>
             <span key={splits.find((s) => s.userId === viewingUserId)?.grandTotal} className="text-xl font-bold text-primary animate-pop">

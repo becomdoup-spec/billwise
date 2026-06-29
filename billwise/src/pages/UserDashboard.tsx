@@ -70,7 +70,7 @@ export function UserDashboard() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 animate-list">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-6 animate-list">
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-line flex items-center justify-center mb-4">
