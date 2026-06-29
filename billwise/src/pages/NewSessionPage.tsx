@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Check, UserPlus, X, Loader2 } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
+import { Modal } from '../components/shared/Modal'
 import { BillUpload } from '../components/admin/BillUpload'
 import { useAppStore } from '../store/appStore'
 import type { ParsedBill } from '../types'
@@ -26,6 +27,8 @@ export function NewSessionPage() {
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberPin, setNewMemberPin] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const [creationStep, setCreationStep] = useState('')
+  const [showBillReady, setShowBillReady] = useState(false)
 
   const regularUsers = users.filter((u) => u.role === 'user')
 
@@ -33,6 +36,7 @@ export function NewSessionPage() {
     setParsedBill(bill)
     setImageDataUrl(image ?? '')
     setStep('participants')
+    setShowBillReady(true)
   }
 
   const toggleUser = (id: string) => {
@@ -50,6 +54,7 @@ export function NewSessionPage() {
     if (isCreating) return
 
     setIsCreating(true)
+    setCreationStep('Creating the session…')
     let createdSessionId = ''
     try {
       const session = await createSession({
@@ -65,15 +70,20 @@ export function NewSessionPage() {
       })
       createdSessionId = session.id
 
-      await Promise.all(selectedUserIds.map((uid) => addParticipant(session.id, uid)))
-
+      setCreationStep('Saving people and bill items…')
       const billItems = parsedBill.items.map((item) => ({
         ...item,
         id: generateId(),
         sessionId: session.id,
       }))
-      await setBillItems(session.id, billItems)
-      if (imageDataUrl) await saveBillImage(session.id, imageDataUrl)
+
+      await Promise.all([
+        Promise.all(selectedUserIds.map((uid) => addParticipant(session.id, uid))),
+        setBillItems(session.id, billItems),
+        imageDataUrl ? saveBillImage(session.id, imageDataUrl) : Promise.resolve(false),
+      ])
+
+      setCreationStep('Opening item selection…')
       await updateSession(session.id, { isPublic: true })
 
       toast.success(`Session created — ${session.orderId}`)
@@ -84,6 +94,7 @@ export function NewSessionPage() {
       }
       toast.error('Session could not be saved. Check the Supabase connection and try again.')
       setIsCreating(false)
+      setCreationStep('')
     }
   }
 
@@ -119,6 +130,12 @@ export function NewSessionPage() {
       <div className="flex-1 overflow-y-auto p-4">
         {step === 'upload' && (
           <div className="animate-fade-in">
+            <div className="mb-4 rounded-xl border border-line bg-surface px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Step 1 of 2 · Upload bill</p>
+              <p className="mt-1 text-xs text-fg-subtle">
+                Review the parsed bill and correct any upload-reading mistakes before using it.
+              </p>
+            </div>
             <p className="text-sm text-fg-muted mb-4">
               Upload a photo of your bill — AI will extract, format, and validate every item and price automatically.
             </p>
@@ -128,6 +145,12 @@ export function NewSessionPage() {
 
         {step === 'participants' && (
           <div className="animate-slide-up space-y-4">
+            <div className="rounded-xl border border-primary/25 bg-primary/[0.08] px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Step 2 of 2 · Choose people</p>
+              <p className="mt-1 text-xs text-fg-subtle">
+                Select members now. After this, the session opens to choose items from the uploaded bill.
+              </p>
+            </div>
             <div>
               <p className="text-sm font-semibold text-fg mb-1">Who joined?</p>
               <p className="text-xs text-fg-subtle">Select everyone at the table. They'll pick their items.</p>
@@ -223,7 +246,7 @@ export function NewSessionPage() {
             {selectedUserIds.length > 0 && (
               <div className="flex items-center gap-2 bg-surface rounded-xl border border-line px-4 py-3">
                 <span className="text-xs text-fg-subtle flex-1">
-                  {selectedUserIds.length} participant{selectedUserIds.length > 1 ? 's' : ''} · GST split equally
+                  {selectedUserIds.length} participant{selectedUserIds.length > 1 ? 's' : ''} · Next: choose your items
                 </span>
               </div>
             )}
@@ -235,11 +258,59 @@ export function NewSessionPage() {
             >
               {isCreating
                 ? <><Loader2 size={15} className="animate-spin" /> Creating session…</>
-                : 'Create Session →'}
+                : selectedUserIds.length > 0 ? 'Create Session & Choose Items →' : 'Create Session →'}
             </button>
           </div>
         )}
       </div>
+
+      <Modal
+        open={showBillReady}
+        onClose={() => setShowBillReady(false)}
+        title="Bill uploaded"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-success/20 bg-success/[0.07] px-4 py-3">
+            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+              <Check size={14} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-fg">Bill uploaded. Now choose people.</p>
+              <p className="mt-1 text-xs leading-relaxed text-fg-subtle">
+                Select the people on this bill, then create the session. The next screen is where everyone chooses their items and portions.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowBillReady(false)}
+            className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-all hover:bg-primary-hover active:scale-98"
+          >
+            Choose people
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isCreating}
+        onClose={() => undefined}
+        title="Creating session"
+        size="sm"
+        dismissible={false}
+      >
+        <div className="space-y-4 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10">
+            <Loader2 size={24} className="animate-spin text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-fg">{creationStep || 'Saving your bill…'}</p>
+            <p className="mt-1 text-xs leading-relaxed text-fg-subtle">
+              Please keep this screen open. The item selection page will open automatically.
+            </p>
+          </div>
+        </div>
+      </Modal>
     </Layout>
   )
 }

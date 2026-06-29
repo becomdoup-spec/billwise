@@ -345,6 +345,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       setSelection: async (sessionId, userId, itemId, portion) => {
         requireCloudConnection()
         const state = get()
+        const previousSelections = state.selections
         const participantLocked = state.sessions.some((session) =>
           session.id === sessionId && (session.lockedParticipantIds ?? []).includes(userId),
         )
@@ -367,22 +368,33 @@ export const useAppStore = create<AppStore>((set, get) => ({
               portionPercentage: portion,
               lockedAt: participantLocked ? new Date().toISOString() : undefined,
             }
-        await dbUpsertSelection(sel)
-        set((s) => ({
+        set({
           selections: existing
-            ? s.selections.map((selection) => selection.id === existing.id ? sel : selection)
-            : [...s.selections, sel],
-        }))
+            ? previousSelections.map((selection) => selection.id === existing.id ? sel : selection)
+            : [...previousSelections, sel],
+        })
+        try {
+          await dbUpsertSelection(sel)
+        } catch (error) {
+          set({ selections: previousSelections })
+          throw error
+        }
       },
 
       removeSelection: async (sessionId, userId, itemId) => {
         requireCloudConnection()
-        await dbDeleteSelection(sessionId, userId, itemId)
-        set((s) => ({
-          selections: s.selections.filter(
+        const previousSelections = get().selections
+        set({
+          selections: previousSelections.filter(
             (sel) => !(sel.sessionId === sessionId && sel.userId === userId && sel.itemId === itemId),
           ),
-        }))
+        })
+        try {
+          await dbDeleteSelection(sessionId, userId, itemId)
+        } catch (error) {
+          set({ selections: previousSelections })
+          throw error
+        }
       },
 
 	      lockUserSelections: async (sessionId, userId) => {

@@ -18,7 +18,7 @@ const NOTCH_EVERY = 10
 
 function snap(value: number, max: number) {
   const stepped = Math.round(value / STEP) * STEP
-  return Math.min(Math.max(0, stepped), max)
+  return Math.min(Math.max(0, stepped), Math.max(0, max))
 }
 
 function round(value: number) {
@@ -47,7 +47,7 @@ export function PortionSlider({
   const otherFixedPortions = otherSelections
     .filter((selection) => selection.portionPercentage < 100)
     .reduce((sum, selection) => sum + selection.portionPercentage, 0)
-  const maxPortion = Math.max(STEP, round(100 - otherFixedPortions))
+  const maxPortion = Math.max(0, round(100 - otherFixedPortions))
   const [portion, setPortion] = useState(() => snap(currentPortion || maxPortion, maxPortion))
   const [amountInput, setAmountInput] = useState(() => amountInputValue(item.totalPrice * (portion / 100)))
   const [animKey, setAnimKey] = useState(0)
@@ -55,6 +55,7 @@ export function PortionSlider({
 
   const amount = item.totalPrice * (portion / 100)
   const remaining = maxPortion - portion
+  const maxAmount = round(item.totalPrice * (maxPortion / 100))
 
   const presets = [25, 33, 50, 67, 75, 100].filter((preset) => preset <= maxPortion)
 
@@ -69,7 +70,6 @@ export function PortionSlider({
     setAmountInput(rawValue)
     const enteredAmount = Number(rawValue)
     if (!rawValue || !Number.isFinite(enteredAmount) || item.totalPrice <= 0) return
-    const maxAmount = item.totalPrice * (maxPortion / 100)
     const boundedAmount = Math.min(Math.max(0, enteredAmount), maxAmount)
     const calculatedPortion = round((boundedAmount / item.totalPrice) * 100)
     setPortion(calculatedPortion)
@@ -78,7 +78,10 @@ export function PortionSlider({
 
   // Notch marks along the track
   const notchCount = Math.floor(maxPortion / NOTCH_EVERY)
-  const notches = Array.from({ length: notchCount + 1 }, (_, i) => i * NOTCH_EVERY).filter(n => n <= maxPortion)
+  const notches = maxPortion > 0
+    ? Array.from({ length: notchCount + 1 }, (_, i) => i * NOTCH_EVERY).filter(n => n <= maxPortion)
+    : []
+  const rangeFillPct = maxPortion > 0 ? (portion / maxPortion) * 100 : 0
 
   // Color based on portion (theme-aware via CSS custom properties)
   const accentColor = portion === 0
@@ -161,6 +164,9 @@ export function PortionSlider({
             {remaining > 0 && remaining < maxPortion && (
               <p className="text-xs text-fg-faint mt-1">{remaining}% unallocated</p>
             )}
+            {maxPortion === 0 && (
+              <p className="text-xs text-danger mt-1">No unallocated share is available</p>
+            )}
           </div>
 
           {/* Absolute amount entry */}
@@ -190,6 +196,11 @@ export function PortionSlider({
             <p className="text-[10px] text-fg-subtle text-right">
               {amountInput || '0'} of {formatCurrency(item.totalPrice)} = {formatPercentage(portion)}%
             </p>
+            {maxAmount < item.totalPrice && (
+              <p className="text-[10px] text-fg-faint text-right">
+                Available here: {formatCurrency(maxAmount)}
+              </p>
+            )}
           </div>
         </>
       )}
@@ -252,7 +263,7 @@ export function PortionSlider({
           onChange={(e) => setPortionAnimated(parseInt(e.target.value))}
           className="slider-brand w-full"
           style={{
-            background: `linear-gradient(to right, ${accentColor} ${(portion / maxPortion) * 100}%, rgb(var(--surface-overlay)) ${(portion / maxPortion) * 100}%)`,
+            background: `linear-gradient(to right, ${accentColor} ${rangeFillPct}%, rgb(var(--surface-overlay)) ${rangeFillPct}%)`,
           }}
         />
 
@@ -293,9 +304,9 @@ export function PortionSlider({
         </button>
         <button
           onClick={() => onConfirm(shareMode === 'equal' ? 100 : portion)}
-          disabled={shareMode === 'custom' && portion === 0}
+          disabled={(shareMode === 'custom' && portion === 0) || (shareMode === 'equal' && maxPortion === 0)}
           className="flex-[2] py-3 rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-95 disabled:bg-surface-overlay disabled:text-fg-faint"
-          style={shareMode === 'equal' || portion > 0 ? { background: 'rgb(var(--primary))' } : {}}
+          style={(shareMode === 'equal' && maxPortion > 0) || portion > 0 ? { background: 'rgb(var(--primary))' } : {}}
         >
           {shareMode === 'equal' ? 'Split equally' : `Set ${formatPercentage(portion)}%`}
         </button>

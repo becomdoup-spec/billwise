@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useSessionSync } from '../hooks/useSessionSync'
 import {
   Users, Receipt, BarChart3, Lock, UserPlus, UserMinus, Plus,
   CheckCircle, AlertCircle, ChevronDown, ChevronUp, Clock, Sparkles, FileImage, Loader2, Pencil,
-  ImageDown, FileDown,
+  ImageDown, FileDown, Trash2,
 } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
@@ -22,6 +22,7 @@ import { downloadSplitImage, downloadSplitPdf } from '../services/splitExport'
 import clsx from 'clsx'
 
 type Tab = 'items' | 'split' | 'people'
+type BillEditorDraft = { name: string; quantity: string; totalPrice: string }
 
 export function SessionPage() {
   const { id } = useParams<{ id: string }>()
@@ -41,7 +42,11 @@ export function SessionPage() {
   const [billImageLoading, setBillImageLoading] = useState(false)
   const [editingUserId, setEditingUserId] = useState('')
   const [exporting, setExporting] = useState<'image' | 'pdf' | ''>('')
-  const [addingItem, setAddingItem] = useState(false)
+  const [showBillEditor, setShowBillEditor] = useState(false)
+  const [billEditorDrafts, setBillEditorDrafts] = useState<Record<string, BillEditorDraft>>({})
+  const [billEditorSaving, setBillEditorSaving] = useState(false)
+  const [showChooseItemsIntro, setShowChooseItemsIntro] = useState(false)
+  const [showLockDoneModal, setShowLockDoneModal] = useState(false)
   const [newItemName, setNewItemName] = useState('')
   const [newItemPrice, setNewItemPrice] = useState('')
 
@@ -50,6 +55,22 @@ export function SessionPage() {
   const session = sessions.find((s) => s.id === id)
   const isAdmin = currentUser?.role === 'admin'
   const isCreator = !isAdmin && session?.createdBy === currentUser?.id
+
+  useEffect(() => {
+    if (!session || !currentUser || currentUser.role === 'admin') return
+    if (!session.participantIds.includes(currentUser.id)) return
+    if ((session.lockedParticipantIds ?? []).includes(currentUser.id)) return
+
+    const introKey = `billwise:choose-items-intro:${session.id}:${currentUser.id}`
+    if (window.localStorage.getItem(introKey)) return
+    setShowChooseItemsIntro(true)
+  }, [
+    session?.id,
+    session?.participantIds.join('|'),
+    session?.lockedParticipantIds?.join('|'),
+    currentUser?.id,
+    currentUser?.role,
+  ])
 
   if (!session) return (
     <Layout>
@@ -104,6 +125,122 @@ export function SessionPage() {
   })
   const allParticipantsLocked = completionState.everyoneLocked
   const hasBillImage = Boolean(session.billImageBase64 || session.billImageUrl)
+  const canEditBillContents = isAdmin || isCreator
+
+  const dismissChooseItemsIntro = () => {
+    if (currentUser) {
+      window.localStorage.setItem(`billwise:choose-items-intro:${session.id}:${currentUser.id}`, 'seen')
+    }
+    setShowChooseItemsIntro(false)
+  }
+
+  const openBillEditor = () => {
+    setBillEditorDrafts(Object.fromEntries(
+      selectableItems.map((item) => [
+        item.id,
+        {
+          name: item.name,
+          quantity: String(item.quantity),
+          totalPrice: String(item.totalPrice),
+        },
+      ]),
+    ))
+    setNewItemName('')
+    setNewItemPrice('')
+    setShowBillEditor(true)
+  }
+
+  const updateBillEditorDraft = (itemId: string, data: Partial<BillEditorDraft>) => {
+    setBillEditorDrafts((drafts) => ({
+      ...drafts,
+      [itemId]: {
+        name: drafts[itemId]?.name ?? '',
+        quantity: drafts[itemId]?.quantity ?? '1',
+        totalPrice: drafts[itemId]?.totalPrice ?? '0',
+        ...data,
+      },
+    }))
+  }
+
+  const handleSaveBillEditor = async () => {
+    setBillEditorSaving(true)
+    try {
+      const normalized = selectableItems.map((item) => {
+        const draft = billEditorDrafts[item.id] ?? {
+          name: item.name,
+          quantity: String(item.quantity),
+          totalPrice: String(item.totalPrice),
+        }
+        const name = draft.name.trim()
+        const quantity = Number(draft.quantity)
+        const totalPrice = Number(draft.totalPrice)
+
+        if (!name || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(totalPrice) || totalPrice < 0) {
+          throw new Error('invalid')
+        }
+
+        return { item, name, quantity, totalPrice }
+      })
+
+      const updates = normalized.map(({ item, name, quantity, totalPrice }) => {
+        if (name === item.name && quantity === item.quantity && totalPrice === item.totalPrice) {
+          return Promise.resolve()
+        }
+
+        const unitPrice = Math.round((totalPrice / quantity) * 100) / 100
+        return updateBillItem(session.id, item.id, { name, quantity, totalPrice, unitPrice })
+      })
+
+      await Promise.all(updates)
+      toast.success('Uploaded bill contents updated')
+      setShowBillEditor(false)
+    } catch {
+      toast.error('Check item names, quantities, and amounts before saving')
+    } finally {
+      setBillEditorSaving(false)
+    }
+  }
+
+  const handleAddBillEditorItem = async () => {
+    const name = newItemName.trim()
+    const price = Number(newItemPrice)
+    if (!name || !Number.isFinite(price) || price <= 0) {
+      toast.error('Enter a valid item name and amount')
+      return
+    }
+
+    try {
+      const item = await addBillItem(session.id, {
+        name,
+        quantity: 1,
+        unitPrice: price,
+        totalPrice: price,
+      })
+      setBillEditorDrafts((drafts) => ({
+        ...drafts,
+        [item.id]: { name: item.name, quantity: String(item.quantity), totalPrice: String(item.totalPrice) },
+      }))
+      setNewItemName('')
+      setNewItemPrice('')
+      toast.success('Item added to uploaded bill')
+    } catch {
+      toast.error('Item could not be added')
+    }
+  }
+
+  const handleRemoveBillEditorItem = async (itemId: string) => {
+    try {
+      await removeBillItem(session.id, itemId)
+      setBillEditorDrafts((drafts) => {
+        const next = { ...drafts }
+        delete next[itemId]
+        return next
+      })
+      toast.info('Item removed from uploaded bill')
+    } catch {
+      toast.error('Item could not be removed')
+    }
+  }
 
   const handleViewBillImage = async () => {
     setShowBillImage(true)
@@ -154,10 +291,15 @@ export function SessionPage() {
   const handleLockMine = async () => {
     try {
       await lockUserSelections(session.id, viewingUserId)
-      toast.success('Your selections are locked!')
+      setShowLockDoneModal(true)
     } catch {
       toast.error('Selections could not be locked')
     }
+  }
+
+  const closeLockDoneModal = () => {
+    setShowLockDoneModal(false)
+    navigate('/user')
   }
 
   const handleUnlockMine = async () => {
@@ -312,6 +454,30 @@ export function SessionPage() {
               </div>
             )}
 
+            {canEditBillContents && (
+              <div className="mx-4 mt-3 rounded-xl border border-line bg-surface px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-overlay">
+                    <Receipt size={15} className="text-primary" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-fg">Uploaded bill contents</p>
+                    <p className="mt-0.5 text-[10px] leading-relaxed text-fg-subtle">
+                      Correct item names, quantities, or amounts here. The selection list keeps bill amounts locked.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openBillEditor}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+                  >
+                    <Pencil size={12} />
+                    Edit
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Items list */}
             {isAdmin && (
               <div className={clsx(
@@ -355,41 +521,13 @@ export function SessionPage() {
                     participants={participants}
                     currentUserId={selectionUserId}
                     isLocked={!isAdmin && (isSessionLocked || myLocked)}
-                    isAdmin={isAdmin || isCreator}
+                    isAdmin={isAdmin}
+                    canEditBill={false}
                     canEditSelection={!isAdmin || Boolean(editingUser)}
                     showSelectionControl={!isAdmin || Boolean(editingUser)}
                     onSelect={handleSelect}
                     onDeselect={handleDeselect}
                     onPortionChange={handlePortion}
-                    onEditName={(itemId, name) => {
-                      updateBillItem(session.id, itemId, { name }).catch(() => {
-                        toast.error('Item name could not be saved')
-                      })
-                    }}
-                    onEditPrice={(itemId, totalPrice) => {
-                      const it = items.find((i) => i.id === itemId)
-                      if (!it) return
-                      const unitPrice = it.quantity > 1 ? totalPrice / it.quantity : totalPrice
-                      updateBillItem(session.id, itemId, {
-                        totalPrice,
-                        unitPrice: Math.round(unitPrice * 100) / 100,
-                      }).catch(() => {
-                        toast.error('Item price could not be saved')
-                      })
-                    }}
-                    onEditQuantity={(itemId, quantity) => {
-                      const item = items.find((candidate) => candidate.id === itemId)
-                      if (!item) return
-                      const totalPrice = Math.round(quantity * item.unitPrice * 100) / 100
-                      updateBillItem(session.id, itemId, { quantity, totalPrice }).catch(() => {
-                        toast.error('Quantity could not be saved')
-                      })
-                    }}
-                    onDelete={isCreator ? (itemId) => {
-                      removeBillItem(session.id, itemId).catch(() => {
-                        toast.error('Item could not be removed')
-                      })
-                    } : undefined}
                   />
                 )
               })}
@@ -403,69 +541,6 @@ export function SessionPage() {
                 </div>
               )}
             </div>
-
-            {/* Add item — creator only */}
-            {isCreator && (
-              <div className="mx-4 mt-3">
-                {addingItem ? (
-                  <div className="bg-surface border border-primary/30 rounded-xl p-3 space-y-2">
-                    <input
-                      autoFocus
-                      value={newItemName}
-                      onChange={(e) => setNewItemName(e.target.value)}
-                      placeholder="Item name"
-                      className="w-full bg-surface-raised border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/50"
-                    />
-                    <input
-                      value={newItemPrice}
-                      onChange={(e) => setNewItemPrice(e.target.value.replace(/[^0-9.]/g, ''))}
-                      placeholder="Price (₹)"
-                      inputMode="decimal"
-                      className="w-full bg-surface-raised border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/50"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setAddingItem(false); setNewItemName(''); setNewItemPrice('') }}
-                        className="flex-1 py-2 rounded-lg border border-line text-xs text-fg-muted hover:bg-surface-overlay transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={async () => {
-                          const price = parseFloat(newItemPrice)
-                          if (!newItemName.trim() || isNaN(price) || price <= 0) {
-                            toast.error('Enter a valid name and price')
-                            return
-                          }
-                          try {
-                            await addBillItem(session.id, {
-                              name: newItemName.trim(),
-                              quantity: 1,
-                              unitPrice: price,
-                              totalPrice: price,
-                            })
-                            setNewItemName(''); setNewItemPrice('')
-                            toast.success('Item added')
-                          } catch {
-                            toast.error('Item could not be added')
-                          }
-                        }}
-                        className="flex-1 py-2 rounded-lg bg-primary text-xs font-semibold text-primary-fg hover:bg-primary-hover transition-colors"
-                      >
-                        Add item
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setAddingItem(true)}
-                    className="w-full flex items-center justify-center gap-2 border border-dashed border-primary/40 hover:border-primary/70 bg-primary/5 hover:bg-primary/10 rounded-xl py-2.5 text-xs font-medium text-primary transition-all"
-                  >
-                    <Plus size={13} /> Add item to bill
-                  </button>
-                )}
-              </div>
-            )}
 
             {sharedChargesTotal > 0 && (
               <div className="mx-4 mt-3 flex items-start gap-2 bg-surface border border-line rounded-xl px-4 py-3">
@@ -781,6 +856,192 @@ export function SessionPage() {
           </div>
         </div>
       )}
+
+      <Modal
+        open={showChooseItemsIntro}
+        onClose={dismissChooseItemsIntro}
+        title="Bill uploaded"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-success/20 bg-success/[0.07] px-4 py-3">
+            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+              <CheckCircle size={14} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-fg">Bill uploaded. Now choose your items.</p>
+              <p className="mt-1 text-xs leading-relaxed text-fg-subtle">
+                Select only what you consumed. For shared items, use Portion to enter your percentage or amount. Bill quantity and amount are locked on this screen.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={dismissChooseItemsIntro}
+            className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-all hover:bg-primary-hover active:scale-98"
+          >
+            Choose items
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showLockDoneModal}
+        onClose={closeLockDoneModal}
+        title="Items locked"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-success/20 bg-success/[0.07] px-4 py-3">
+            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+              <CheckCircle size={14} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-fg">Your items are locked now.</p>
+              <p className="mt-1 text-xs leading-relaxed text-fg-subtle">
+                You will be taken back to your outstanding bills.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={closeLockDoneModal}
+            className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-all hover:bg-primary-hover active:scale-98"
+          >
+            Back to my bills
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showBillEditor}
+        onClose={() => setShowBillEditor(false)}
+        title="Edit uploaded bill"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <p className="text-xs leading-relaxed text-fg-subtle">
+            Correct the uploaded bill here when OCR or formatting reads a row incorrectly. Diners cannot change these amounts while selecting items.
+          </p>
+
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+            {selectableItems.map((item) => {
+              const draft = billEditorDrafts[item.id] ?? {
+                name: item.name,
+                quantity: String(item.quantity),
+                totalPrice: String(item.totalPrice),
+              }
+
+              return (
+                <div key={item.id} className="rounded-xl border border-line bg-surface px-3 py-3">
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <input
+                        value={draft.name}
+                        onChange={(event) => updateBillEditorDraft(item.id, { name: event.target.value })}
+                        placeholder="Item name"
+                        className="w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-fg placeholder-fg-faint focus:border-primary/60 focus:outline-none"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="space-y-1">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-fg-faint">Qty</span>
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            inputMode="decimal"
+                            value={draft.quantity}
+                            onChange={(event) => updateBillEditorDraft(item.id, { quantity: event.target.value })}
+                            className="w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-fg focus:border-primary/60 focus:outline-none"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-fg-faint">Amount</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            value={draft.totalPrice}
+                            onChange={(event) => updateBillEditorDraft(item.id, { totalPrice: event.target.value })}
+                            className="w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-fg focus:border-primary/60 focus:outline-none"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBillEditorItem(item.id)}
+                      className="mt-0.5 rounded-lg p-2 text-fg-faint transition-colors hover:bg-danger/10 hover:text-danger"
+                      aria-label={`Remove ${item.name}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+
+            {selectableItems.length === 0 && (
+              <div className="rounded-xl border border-line bg-surface px-4 py-6 text-center">
+                <Receipt size={20} className="mx-auto mb-2 text-fg-faint" />
+                <p className="text-xs text-fg-subtle">No bill items yet</p>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-dashed border-line bg-surface px-3 py-3">
+            <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-fg-faint">Add missing item</p>
+            <div className="grid grid-cols-[1fr_7rem] gap-2">
+              <input
+                value={newItemName}
+                onChange={(event) => setNewItemName(event.target.value)}
+                placeholder="Item name"
+                className="rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-fg placeholder-fg-faint focus:border-primary/60 focus:outline-none"
+              />
+              <input
+                value={newItemPrice}
+                onChange={(event) => setNewItemPrice(event.target.value.replace(/[^0-9.]/g, ''))}
+                placeholder="Amount"
+                inputMode="decimal"
+                className="rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-fg placeholder-fg-faint focus:border-primary/60 focus:outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleAddBillEditorItem}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+            >
+              <Plus size={12} />
+              Add item now
+            </button>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowBillEditor(false)}
+              disabled={billEditorSaving}
+              className="flex-1 rounded-xl border border-line py-3 text-sm text-fg-muted transition-colors hover:bg-surface-overlay disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveBillEditor}
+              disabled={billEditorSaving}
+              className="flex-[2] rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-all hover:bg-primary-hover disabled:bg-surface-overlay disabled:text-fg-faint"
+            >
+              {billEditorSaving ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin" />
+                  Saving…
+                </span>
+              ) : 'Save bill contents'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={showBillImage} onClose={() => setShowBillImage(false)} title="Original bill" size="lg">
         {billImageLoading ? (

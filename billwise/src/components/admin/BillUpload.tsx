@@ -214,12 +214,15 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         {/* Option 1 — AI */}
         <button
           onClick={() => { setMode('ai'); setState('idle') }}
-          className="w-full flex items-start gap-4 bg-surface border border-line hover:border-primary/40 hover:bg-primary/5 rounded-2xl px-4 py-4 text-left transition-all group"
+          className="relative w-full flex items-start gap-4 overflow-hidden bg-primary/[0.08] border border-primary/35 hover:border-primary/60 hover:bg-primary/[0.12] rounded-2xl px-4 py-4 text-left transition-all group shadow-glow"
         >
+          <span className="absolute right-3 top-3 rounded-full border border-primary/30 bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+            Recommended
+          </span>
           <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-primary/20 transition-colors">
             <Sparkles size={18} className="text-primary" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 pr-20">
             <p className="text-sm font-semibold text-fg">Upload &amp; format using AI</p>
             <p className="text-xs text-fg-subtle mt-0.5 leading-relaxed">
               Upload any bill photo — AI reads it and generates a clean, formatted digital bill automatically.

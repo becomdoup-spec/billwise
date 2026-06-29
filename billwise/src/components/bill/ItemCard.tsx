@@ -14,6 +14,7 @@ interface ItemCardProps {
   currentUserId: string
   isLocked: boolean
   isAdmin: boolean
+  canEditBill?: boolean
   canEditSelection?: boolean
   showSelectionControl?: boolean
   onSelect: (itemId: string) => void
@@ -46,6 +47,7 @@ export function ItemCard({
   currentUserId,
   isLocked,
   isAdmin,
+  canEditBill = false,
   canEditSelection = true,
   showSelectionControl = true,
   onSelect,
@@ -69,6 +71,7 @@ export function ItemCard({
 
   const isSelected = Boolean(selection)
   const selectionLocked = isLocked || !canEditSelection
+  const billEditingEnabled = canEditBill && !isLocked
   const portion = selection?.portionPercentage ?? 100
   const isSplit = portion < 100
   const myAmount = isSelected ? item.totalPrice * (portion / 100) : 0
@@ -189,7 +192,7 @@ export function ItemCard({
           {/* Name + price row */}
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              {isAdmin && editingName ? (
+              {billEditingEnabled && editingName ? (
                 <input
                   autoFocus
                   value={nameVal}
@@ -204,17 +207,17 @@ export function ItemCard({
                   className={clsx(
                     'text-sm font-medium truncate',
                     isSelected ? 'text-fg' : 'text-fg-muted',
-                    isAdmin && !isLocked && 'cursor-text hover:text-fg',
+                    billEditingEnabled && 'cursor-text hover:text-fg',
                   )}
-                  onDoubleClick={isAdmin && !isLocked ? (e) => { e.stopPropagation(); setEditingName(true) } : undefined}
+                  onDoubleClick={billEditingEnabled ? (e) => { e.stopPropagation(); setEditingName(true) } : undefined}
                 >
                   {item.name}
-                  {isAdmin && !isLocked && (
+                  {billEditingEnabled && (
                     <span className="ml-1 opacity-0 group-hover:opacity-100 text-fg-faint text-[10px]">✎</span>
                   )}
                 </p>
               )}
-              {onDelete && !isLocked && (
+              {onDelete && billEditingEnabled && (
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onDelete(item.id) }}
@@ -230,7 +233,7 @@ export function ItemCard({
                     ? `${item.quantity} × ${formatCurrency(item.unitPrice)}`
                     : formatCurrency(item.unitPrice)}
                 </p>
-                {isAdmin && !isLocked && onEditQuantity && (
+                {billEditingEnabled && onEditQuantity && (
                   <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
                     <button
                       type="button"
@@ -251,7 +254,7 @@ export function ItemCard({
             </div>
 
             <div className="text-right shrink-0">
-              {isAdmin && editingPrice ? (
+              {billEditingEnabled && editingPrice ? (
                 <input
                   autoFocus
                   value={priceVal}
@@ -267,9 +270,9 @@ export function ItemCard({
                   className={clsx(
                     'text-sm font-semibold transition-all',
                     isSelected ? 'text-primary' : 'text-fg-muted',
-                    isAdmin && !isLocked && 'cursor-text hover:text-primary',
+                    billEditingEnabled && 'cursor-text hover:text-primary',
                   )}
-                  onDoubleClick={isAdmin && !isLocked ? (e) => { e.stopPropagation(); setEditingPrice(true) } : undefined}
+                  onDoubleClick={billEditingEnabled ? (e) => { e.stopPropagation(); setEditingPrice(true) } : undefined}
                 >
                   {isSelected ? formatCurrency(myAmount) : formatCurrency(item.totalPrice)}
                 </p>
@@ -368,9 +371,22 @@ export function ItemCard({
 
           {/* Hint when selected and not locked */}
           {selection && !selectionLocked && (
-            <p className="text-[10px] text-fg-faint leading-none">
-              hold or double-tap to adjust portion
-            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  triggerPortionSlider()
+                }}
+                className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-raised px-2 py-1 text-[10px] font-medium text-fg-muted hover:border-primary/30 hover:text-primary transition-colors"
+              >
+                <Sliders size={10} />
+                Portion
+              </button>
+              <p className="text-[10px] text-fg-faint leading-none">
+                hold or double-tap also works
+              </p>
+            </div>
           )}
         </div>
       </div>
