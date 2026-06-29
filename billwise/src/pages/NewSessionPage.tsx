@@ -120,7 +120,7 @@ export function NewSessionPage() {
         {step === 'upload' && (
           <div className="animate-fade-in">
             <p className="text-sm text-fg-muted mb-4">
-              Upload a photo of your bill — OCR will extract every item and price automatically, right on your device.
+              Upload a photo of your bill — AI will extract, format, and validate every item and price automatically.
             </p>
             <BillUpload onParsed={handleBillParsed} />
           </div>

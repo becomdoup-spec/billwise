@@ -1,11 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Image, AlertCircle, CheckCircle, Plus, Trash2,
-  Sparkles, FileText, PencilLine, X, Info,
+  Sparkles, FileText, PencilLine, X, Info, Copy, Check,
 } from 'lucide-react'
 import type { ParsedBill } from '../../types'
-import { parseBillImage, emptyParsedBill, type OcrProgress } from '../../services/billParser'
-import { parseBillWithClaude, type AiProgress } from '../../services/claudeBillParser'
+import { emptyParsedBill } from '../../services/billParser'
+import { BILL_AI_FORMAT_PROMPT, parseBillWithClaude, type AiProgress } from '../../services/claudeBillParser'
 import { renderCleanBillImage } from '../../services/billImageRenderer'
 import { formatCurrency, isBillSummaryItemName } from '../../services/calculations'
 import clsx from 'clsx'
@@ -25,17 +25,18 @@ interface BillUploadProps {
 
 type UploadMode = null | 'ai' | 'formatted' | 'manual'
 type UploadState = 'idle' | 'format-info' | 'processing' | 'done' | 'error'
+type CopyStatus = 'idle' | 'copied' | 'error'
 
-const FORMAT_STRUCTURE = `RESTAURANT NAME
+const FORMAT_STRUCTURE = `MERCHANT / RESTAURANT NAME
 Date: YYYY-MM-DD
 
 ITEM | QTY | UNIT PRICE | AMOUNT
-[One item per line]
+[Use the printed amount from the bill]
 
-Subtotal
-CGST
-SGST
-Grand Total`
+Subtotal | printed value
+CGST | printed value, or 0.00
+SGST | printed value, or 0.00
+Grand Total | printed value`
 
 export function BillUpload({ onParsed }: BillUploadProps) {
   const [mode, setMode] = useState<UploadMode>(null)
@@ -44,12 +45,14 @@ export function BillUpload({ onParsed }: BillUploadProps) {
   const [progressPct, setProgressPct] = useState(0)
   const [displayPct, setDisplayPct] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
+  const [promptCopyStatus, setPromptCopyStatus] = useState<CopyStatus>('idle')
   const [preview, setPreview] = useState<string>('')
   const [, setParsed] = useState<ParsedBill | null>(null)
   const [editBill, setEditBill] = useState<ParsedBill>(emptyParsedBill())
   const fileRef = useRef<HTMLInputElement>(null)
   const targetPctRef = useRef(0)
   const animFrameRef = useRef<number>(0)
+  const promptCopyTimerRef = useRef<number>(0)
 
   // Smoothly animate displayPct towards progressPct
   useEffect(() => {
@@ -68,6 +71,10 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     return () => cancelAnimationFrame(animFrameRef.current)
   }, [progressPct])
 
+  useEffect(() => () => {
+    if (promptCopyTimerRef.current) window.clearTimeout(promptCopyTimerRef.current)
+  }, [])
+
   // ── helpers ──────────────────────────────────────────────
   const resetToModeSelect = () => {
     setMode(null)
@@ -75,6 +82,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     setPreview('')
     setParsed(null)
     setErrorMsg('')
+    setPromptCopyStatus('idle')
     setProgressPct(0)
     setDisplayPct(0)
   }
@@ -96,8 +104,20 @@ export function BillUpload({ onParsed }: BillUploadProps) {
       reader.readAsDataURL(file)
     })
 
+  const copyAiPrompt = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(BILL_AI_FORMAT_PROMPT)
+      setPromptCopyStatus('copied')
+    } catch {
+      setPromptCopyStatus('error')
+    }
+
+    if (promptCopyTimerRef.current) window.clearTimeout(promptCopyTimerRef.current)
+    promptCopyTimerRef.current = window.setTimeout(() => setPromptCopyStatus('idle'), 2200)
+  }, [])
+
   // ── AI mode file handler ─────────────────────────────────
-  const processWithAI = useCallback(async (file: File) => {
+  const processWithAI = useCallback(async (file: File, renderClean = true) => {
     const err = validateFile(file)
     if (err) { setErrorMsg(err); setState('error'); return }
 
@@ -113,49 +133,15 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         setProgressPct(Math.round(p.progress * 100))
       })
 
-      setProgressLabel('Rendering clean bill image…')
+      setProgressLabel(renderClean ? 'Rendering clean bill image…' : 'Finalising formatted bill…')
       setProgressPct(95)
-      const cleanImage = renderCleanBillImage(result)
 
       setParsed(result)
       setEditBill(result)
-      setPreview(cleanImage)
+      setPreview(renderClean ? renderCleanBillImage(result) : dataUrl)
       setState('done')
     } catch (e) {
       setErrorMsg((e as Error).message ?? 'AI processing failed. Try another option.')
-      setState('error')
-    }
-  }, [])
-
-  // ── Formatted / OCR mode file handler ───────────────────
-  const processWithOCR = useCallback(async (file: File) => {
-    const err = validateFile(file)
-    if (err) { setErrorMsg(err); setState('error'); return }
-
-    const { dataUrl, base64, mediaType } = await readFileAsDataUrl(file)
-    setPreview(dataUrl)
-    setState('processing')
-    setProgressLabel('Starting OCR engine…')
-    setProgressPct(5)
-
-    try {
-      const result = await parseBillImage(base64, mediaType, (p: OcrProgress) => {
-        const statusLabel: Record<string, string> = {
-          'loading tesseract core': 'Loading OCR engine…',
-          'initializing tesseract': 'Initialising engine…',
-          'loading language traineddata': 'Loading language data…',
-          'initializing api': 'Preparing recognition…',
-          'recognizing text': 'Reading bill text…',
-        }
-        setProgressLabel(statusLabel[p.status?.toLowerCase() ?? ''] ?? p.status ?? 'Processing…')
-        // Ensure progress never goes backwards and always starts from at least 5%
-        setProgressPct((prev) => Math.max(prev, Math.max(5, Math.round(p.progress * 100))))
-      })
-      setParsed(result)
-      setEditBill(result)
-      setState('done')
-    } catch (e) {
-      setErrorMsg((e as Error).message ?? 'OCR failed. Try a clearer image or enter manually.')
       setState('error')
     }
   }, [])
@@ -165,7 +151,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     if (!file) return
     e.target.value = ''
     if (mode === 'ai') processWithAI(file)
-    else if (mode === 'formatted') processWithOCR(file)
+    else if (mode === 'formatted') processWithAI(file, false)
   }
 
   const onDrop = (e: React.DragEvent) => {
@@ -173,7 +159,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     const file = e.dataTransfer.files[0]
     if (!file) return
     if (mode === 'ai') processWithAI(file)
-    else if (mode === 'formatted') processWithOCR(file)
+    else if (mode === 'formatted') processWithAI(file, false)
   }
 
   // ── Item editing helpers ─────────────────────────────────
@@ -252,7 +238,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-fg">Upload formatted bill</p>
             <p className="text-xs text-fg-subtle mt-0.5 leading-relaxed">
-              Already have a bill in our standard format? Upload it and OCR will read it precisely.
+              Already have a bill in our standard format? AI validates row math and merges wrapped item lines.
             </p>
           </div>
         </button>
@@ -299,17 +285,30 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         </div>
 
         <p className="text-xs text-fg-subtle leading-relaxed">
-          For best OCR accuracy, your bill should follow this structure with black text on a white background, plain Arial-style font, clear spacing, and no decorative elements.
+          For best AI accuracy, your bill should be clear enough to identify item names, quantities, printed prices, and printed totals.
         </p>
 
         <div className="bg-surface-raised border border-line rounded-xl p-4">
           <pre className="text-xs text-fg font-mono leading-relaxed whitespace-pre-wrap">{FORMAT_STRUCTURE}</pre>
         </div>
 
+        <button
+          type="button"
+          onClick={copyAiPrompt}
+          className="w-full flex items-center justify-center gap-2 border border-line bg-surface hover:bg-surface-raised rounded-xl px-4 py-2.5 text-sm font-semibold text-fg transition-all active:scale-98"
+        >
+          {promptCopyStatus === 'copied' ? <Check size={15} className="text-success" /> : <Copy size={15} />}
+          {promptCopyStatus === 'copied'
+            ? 'Prompt copied'
+            : promptCopyStatus === 'error'
+              ? 'Copy failed'
+              : 'Copy AI prompt'}
+        </button>
+
         <div className="flex items-start gap-2 bg-warning/8 border border-warning/20 rounded-xl px-4 py-3">
           <AlertCircle size={14} className="text-warning shrink-0 mt-0.5" />
           <p className="text-xs text-warning">
-            Use two decimal places and no commas in numbers (e.g. 1234.50 not 1,234.50). No handwriting, shadows, logos, or overlapping text.
+            AI preserves printed money values. It may adjust Qty from pack counts like 3x1ea, but it should not recalculate or change printed amounts and totals.
           </p>
         </div>
 
@@ -372,7 +371,9 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         <div className="flex items-center gap-2 px-3 py-2 bg-surface border border-line rounded-xl">
           <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
           <p className="text-xs text-fg-subtle">
-            {isAI ? 'AI reads and formats your bill into a clean digital version.' : 'Reads bill locally on this device.'}
+            {isAI
+              ? 'AI reads and formats your bill into a clean digital version.'
+              : 'Uses the same AI formatter to validate quantities, prices, and wrapped lines.'}
           </p>
         </div>
 
@@ -387,7 +388,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
   }
 
   // ════════════════════════════════════════════════════════
-  // ── PROCESSING (OCR or AI) ───────────────────────────────
+  // ── PROCESSING ───────────────────────────────────────────
   // ════════════════════════════════════════════════════════
   if (state === 'processing') {
     const pctRounded = Math.round(displayPct)
@@ -452,7 +453,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         <p className="text-xs text-fg-faint text-center leading-relaxed">
           {mode === 'ai'
             ? 'AI is reading and formatting your bill…'
-            : 'OCR runs entirely on your device · nothing is sent to any server'}
+            : 'AI is validating the formatted bill and merging wrapped rows…'}
         </p>
       </div>
     )
@@ -467,7 +468,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         <div className="flex items-center gap-2">
           <CheckCircle size={16} className="text-success" />
           <span className="text-sm font-medium text-fg">
-            {mode === 'ai' ? 'AI formatted bill' : mode === 'formatted' ? 'Bill read' : 'Manual entry'}
+            {mode === 'ai' ? 'AI formatted bill' : mode === 'formatted' ? 'AI parsed bill' : 'Manual entry'}
           </span>
         </div>
         <div className="flex items-center gap-2">

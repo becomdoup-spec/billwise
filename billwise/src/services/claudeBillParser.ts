@@ -2,6 +2,43 @@ import type { ParsedBill } from '../types'
 
 export type AiProgress = { status: string; progress: number }
 
+export const BILL_AI_FORMAT_PROMPT = `You are reading a receipt, invoice, estimate, or handwritten bill image.
+
+Extract the data and return it in this EXACT plain text format — no markdown, no JSON, no extra explanation:
+
+MERCHANT NAME
+Date: YYYY-MM-DD
+
+ITEM | QTY | UNIT PRICE | AMOUNT
+[one item per line in same pipe-separated format]
+
+Subtotal | [value]
+CGST | [value]
+SGST | [value]
+Grand Total | [value]
+
+Rules:
+- Use two decimal places for all numbers (e.g. 120.00)
+- No commas in numbers (e.g. 1234.50 not 1,234.50)
+- If CGST or SGST not present, write 0.00
+- Replace MERCHANT NAME with the actual shop, merchant, or restaurant name
+- Replace YYYY-MM-DD with the actual date (or today if not found)
+- Do not include the header row "ITEM | QTY | UNIT PRICE | AMOUNT" — only data rows
+- Include only real purchasable line items; ignore addresses, phone numbers, dealer text, notes, totals, and business descriptions
+- Preserve printed money values exactly: UNIT PRICE, AMOUNT, Subtotal, CGST, SGST, and Grand Total must come from the bill image when visible
+- Do not recompute, correct, round to a different value, or balance Subtotal/Grand Total from the item rows
+- Use arithmetic only to infer or correct QTY from visible AMOUNT / visible UNIT PRICE when that ratio is a whole number
+- When QTY is adjusted, keep the original visible UNIT PRICE and AMOUNT unchanged
+- If a row cannot be made consistent without changing visible money values, keep the visible money values and prefer discarding duplicate/continuation artifact rows
+- If a line contains pack notation like "(3x1ea)", "3 x 1 ea", "3 pcs", or similar, treat it as QTY and remove it from the item name
+- If the image shows unit price and line total but QTY is unclear, derive QTY from AMOUNT / UNIT PRICE when it is a whole number
+- If an item name wraps onto the next line, merge the wrapped text into the same item name
+- Never create a separate item row for continuation text, business notes, or description-only lines
+- Never output fake rows with QTY 1 and UNIT PRICE/AMOUNT 0.00; those lines are either continuation text or should be ignored
+- Prefer fewer complete rows over extra broken rows
+- If the image shows "Premise (3x1ea) - 3400 - 10200", return "Premise | 3 | 3400.00 | 10200.00"
+- If the image shows an item name on one line and its continuation/description on the next line, return one merged item row only`
+
 /**
  * Parse a receipt image using OpenRouter (free tier).
  * Requires VITE_OPENROUTER_API_KEY in .env
@@ -22,29 +59,6 @@ export async function parseBillWithClaude(
 
   onProgress?.({ status: 'AI is processing your bill…', progress: 0.2 })
 
-  const prompt = `You are reading a restaurant receipt image.
-
-Extract the data and return it in this EXACT plain text format — no markdown, no JSON, no extra explanation:
-
-RESTAURANT NAME
-Date: YYYY-MM-DD
-
-ITEM | QTY | UNIT PRICE | AMOUNT
-[one item per line in same pipe-separated format]
-
-Subtotal | [value]
-CGST | [value]
-SGST | [value]
-Grand Total | [value]
-
-Rules:
-- Use two decimal places for all numbers (e.g. 120.00)
-- No commas in numbers (e.g. 1234.50 not 1,234.50)
-- If CGST or SGST not present, write 0.00
-- Replace RESTAURANT NAME with the actual restaurant name
-- Replace YYYY-MM-DD with the actual date (or today if not found)
-- Do not include the header row "ITEM | QTY | UNIT PRICE | AMOUNT" — only data rows`
-
   const MODELS = [
     'google/gemini-2.5-flash-lite',
     'nvidia/nemotron-nano-12b-v2-vl:free',
@@ -53,7 +67,7 @@ Rules:
 
   const messageContent = [
     { type: 'image_url', image_url: { url: `data:${mediaType};base64,${imageBase64}` } },
-    { type: 'text', text: prompt },
+    { type: 'text', text: BILL_AI_FORMAT_PROMPT },
   ]
 
   let text = ''
@@ -96,8 +110,6 @@ Rules:
 
   onProgress?.({ status: 'AI is structuring your bill…', progress: 0.85 })
 
-  onProgress?.({ status: 'AI is structuring your bill…', progress: 0.85 })
-
   if (!text.trim()) throw new Error(lastError || 'All AI models failed. Please try again in a moment.')
 
   return parseBillText(text.trim())
@@ -124,26 +136,32 @@ function parseBillText(text: string): ParsedBill {
     if (parts.length < 4) continue
 
     const name = parts[0]
-    const quantity = parseFloat(parts[1]) || 1
-    const unitPrice = parseFloat(parts[2]) || 0
-    const totalPrice = parseFloat(parts[3]) || quantity * unitPrice
+    const quantity = parseNumber(parts[1]) ?? 1
+    const unitPrice = parseNumber(parts[2]) ?? 0
+    const totalPrice = parseNumber(parts[3]) ?? 0
 
-    if (name) {
-      items.push({ name, quantity, unitPrice, totalPrice: Math.round(totalPrice * 100) / 100, category: 'food' })
+    if (name && (unitPrice > 0 || totalPrice > 0)) {
+      items.push({
+        name,
+        quantity,
+        unitPrice: Math.round(unitPrice * 100) / 100,
+        totalPrice: Math.round(totalPrice * 100) / 100,
+        category: 'food',
+      })
     }
   }
 
-  const getFooterVal = (key: RegExp): number => {
+  const getFooterVal = (key: RegExp): number | null => {
     const line = lines.find((l) => key.test(l))
-    if (!line) return 0
+    if (!line) return null
     const num = line.split('|').pop()?.trim() ?? line.replace(/[^\d.]/g, '')
-    return parseFloat(num) || 0
+    return parseNumber(num)
   }
 
-  const subtotal = getFooterVal(/^subtotal/i) || items.reduce((s, i) => s + i.totalPrice, 0)
-  const cgst = getFooterVal(/^cgst/i)
-  const sgst = getFooterVal(/^sgst/i)
-  const totalAmount = getFooterVal(/^grand total/i) || subtotal + cgst + sgst
+  const subtotal = getFooterVal(/^subtotal/i) ?? items.reduce((s, i) => s + i.totalPrice, 0)
+  const cgst = getFooterVal(/^cgst/i) ?? 0
+  const sgst = getFooterVal(/^sgst/i) ?? 0
+  const totalAmount = getFooterVal(/^grand total/i) ?? subtotal + cgst + sgst
 
   return {
     restaurantName,
@@ -154,4 +172,12 @@ function parseBillText(text: string): ParsedBill {
     sgst: Math.round(sgst * 100) / 100,
     totalAmount: Math.round(totalAmount * 100) / 100,
   }
+}
+
+function parseNumber(value: string): number | null {
+  const match = value.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)
+  if (!match) return null
+
+  const parsed = Number.parseFloat(match[0])
+  return Number.isFinite(parsed) ? parsed : null
 }

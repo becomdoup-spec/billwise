@@ -142,14 +142,14 @@ export function AdminDashboard() {
             <CompletedBillsToggle />
             <div className="bg-surface rounded-2xl border border-line overflow-hidden">
               <div className="px-4 py-3 border-b border-line">
-                <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Bill OCR</p>
+                <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">Bill AI</p>
               </div>
               <div className="p-4">
                 <div className="flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full bg-success mt-1.5 shrink-0" />
                   <p className="text-xs text-fg-muted leading-relaxed">
-                    Bills are read using <span className="text-fg">Tesseract OCR</span> — runs entirely on your device.
-                    No internet connection, no API key, and no data ever leaves your phone or browser.
+                    Bills are read using <span className="text-fg">AI formatting</span>, so wrapped item names, pack counts, and row totals can be interpreted intelligently.
+                    An AI API key is required for upload parsing.
                   </p>
                 </div>
               </div>
