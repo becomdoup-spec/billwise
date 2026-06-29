@@ -18,6 +18,9 @@ SGST | [value]
 Grand Total | [value]
 
 Rules:
+- Return every visible purchasable item, even when the bill is long (20, 30, or more items)
+- Do not summarize, combine unrelated items, stop early, or omit items because of length
+- Always include the final Subtotal, CGST, SGST, and Grand Total lines after all item rows
 - Use two decimal places for all numbers (e.g. 120.00)
 - No commas in numbers (e.g. 1234.50 not 1,234.50)
 - If CGST or SGST not present, write 0.00
@@ -88,7 +91,7 @@ export async function parseBillWithClaude(
         body: JSON.stringify({
           model,
           messages: [{ role: 'user', content: messageContent }],
-          max_tokens: 1024,
+          max_tokens: 4096,
           temperature: 0.1,
         }),
       })
@@ -100,7 +103,12 @@ export async function parseBillWithClaude(
       }
 
       const data = await response.json()
-      const candidate: string = data?.choices?.[0]?.message?.content ?? ''
+      const choice = data?.choices?.[0]
+      const candidate: string = choice?.message?.content ?? ''
+      if (choice?.finish_reason === 'length') {
+        lastError = 'AI response was truncated. Please retry with a clearer image or split a very long bill into sections.'
+        continue
+      }
       if (candidate.trim()) { text = candidate; break }
       lastError = 'AI returned empty response'
     } catch (e) {
@@ -117,6 +125,10 @@ export async function parseBillWithClaude(
 
 function parseBillText(text: string): ParsedBill {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+  const hasGrandTotal = lines.some((l) => /^grand total\s*\|/i.test(l))
+  if (!hasGrandTotal) {
+    throw new Error('AI response looked incomplete. Please retry so the full bill, including Grand Total, is captured.')
+  }
 
   const restaurantName = lines[0] ?? ''
 
