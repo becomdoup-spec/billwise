@@ -16,6 +16,7 @@ interface AppStore {
   // Data
   users: User[]
   sessions: Session[]
+  pendingSessionIds: string[]
   billItems: Record<string, BillItem[]>
   selections: ItemSelection[]
   apiKey: string
@@ -93,6 +94,7 @@ function requireCloudConnection() {
 export const useAppStore = create<AppStore>((set, get) => ({
       users: [],
       sessions: [],
+      pendingSessionIds: [],
       billItems: {},
       selections: [],
       apiKey: '',
@@ -212,9 +214,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
           lockedParticipantIds: [],
           createdAt: new Date().toISOString(),
         }
-        await dbCreateSession(session)
-        set((s) => ({ sessions: [...s.sessions.filter((item) => item.id !== session.id), session] }))
-        return session
+
+        // Show the session immediately while Supabase and the remaining setup
+        // steps are running. Realtime hydration preserves pending sessions below.
+        set((s) => ({
+          sessions: [session, ...s.sessions.filter((item) => item.id !== session.id)],
+          pendingSessionIds: [...s.pendingSessionIds.filter((id) => id !== session.id), session.id],
+        }))
+
+        try {
+          await dbCreateSession(session)
+          return session
+        } catch (error) {
+          set((s) => ({
+            sessions: s.sessions.filter((item) => item.id !== session.id),
+            pendingSessionIds: s.pendingSessionIds.filter((id) => id !== session.id),
+          }))
+          throw error
+        }
       },
 
       updateSession: async (id, data) => {
@@ -233,6 +250,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           delete billItems[id]
           return {
             sessions: s.sessions.filter((sess) => sess.id !== id),
+            pendingSessionIds: s.pendingSessionIds.filter((sessionId) => sessionId !== id),
             billItems,
             selections: s.selections.filter((sel) => sel.sessionId !== id),
           }
@@ -482,16 +500,38 @@ export const useAppStore = create<AppStore>((set, get) => ({
         set((s) => {
           // Supabase is the source of truth whenever it is configured.
           const mergedUsers = users
-          const mergedSessions = sessions
+          // A refresh can race with the multi-step session creation flow. Keep
+          // locally pending sessions (and their newer local fields) until a
+          // fresh server snapshot confirms that setup has completed.
+          const localSessions = new Map(s.sessions.map((session) => [session.id, session]))
+          const remoteSessions = new Map(sessions.map((session) => [session.id, session]))
+          const remoteSessionIds = new Set(sessions.map((session) => session.id))
+          const mergedSessions = [
+            ...sessions.map((session) => {
+              if (!s.pendingSessionIds.includes(session.id)) return session
+              return { ...session, ...localSessions.get(session.id) }
+            }),
+            ...s.sessions.filter((session) => (
+              s.pendingSessionIds.includes(session.id) && !remoteSessionIds.has(session.id)
+            )),
+          ]
 
           // Re-validate currentUser against fresh users list
           const refreshedCurrentUser = s.currentUser
             ? mergedUsers.find((u) => u.id === s.currentUser!.id) ?? s.currentUser
             : null
 
+          // The session becomes public only after participants, bill items and
+          // the image have finished saving. Keep protecting it until a fresh
+          // server snapshot confirms that final update.
+          const pendingSessionIds = s.pendingSessionIds.filter((sessionId) => (
+            !remoteSessions.get(sessionId)?.isPublic
+          ))
+
           return {
             users: mergedUsers,
             sessions: mergedSessions,
+            pendingSessionIds,
             currentUser: refreshedCurrentUser,
             cloudReady: true,
             cloudSyncError: '',
@@ -502,12 +542,20 @@ export const useAppStore = create<AppStore>((set, get) => ({
       setCloudSyncState: (ready, error = '') => set({ cloudReady: ready, cloudSyncError: error }),
 
       hydrateBillItemsFromSupabase: (items) => {
-        const billItems = items.reduce<Record<string, BillItem[]>>((grouped, item) => {
+        const remoteBillItems = items.reduce<Record<string, BillItem[]>>((grouped, item) => {
           if (!grouped[item.sessionId]) grouped[item.sessionId] = []
           grouped[item.sessionId].push(item)
           return grouped
         }, {})
-        set({ billItems })
+        set((s) => {
+          const billItems = { ...remoteBillItems }
+          for (const sessionId of s.pendingSessionIds) {
+            if ((s.billItems[sessionId]?.length ?? 0) > (billItems[sessionId]?.length ?? 0)) {
+              billItems[sessionId] = s.billItems[sessionId]
+            }
+          }
+          return { billItems }
+        })
       },
 
       hydrateSelectionsFromSupabase: (selections) => {

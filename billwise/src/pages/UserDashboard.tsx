@@ -25,6 +25,7 @@ export function UserDashboard() {
   const navigate = useNavigate()
   const {
     sessions,
+    pendingSessionIds,
     users,
     billItems,
     selections,
@@ -52,7 +53,10 @@ export function UserDashboard() {
     return Date.now() - new Date(s.completedAt).getTime() < TWO_DAYS_MS
   })
 
-  const isEmpty = outstanding.length === 0 && completed.length === 0
+  const sessionsBeingCreated = sessions.filter((session) => (
+    pendingSessionIds.includes(session.id) && session.createdBy === currentUser?.id
+  ))
+  const isEmpty = outstanding.length === 0 && completed.length === 0 && sessionsBeingCreated.length === 0
   const billsNeedingMyAction = outstanding.filter((session) => (
     !isParticipantDone(session, currentUser?.id ?? '')
   )).length
@@ -75,7 +79,15 @@ export function UserDashboard() {
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-6 animate-list">
-        {isEmpty ? (
+        {!splitDataReady && isEmpty ? (
+          <div className="space-y-3 py-4" role="status" aria-label="Loading bills">
+            <div className="skeleton h-28 rounded-xl" />
+            <div className="skeleton h-28 rounded-xl" />
+            <p className="flex items-center justify-center gap-2 text-xs text-fg-subtle">
+              <Loader2 size={13} className="animate-spin text-primary" /> Checking for active bills…
+            </p>
+          </div>
+        ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-line flex items-center justify-center mb-4">
               <Sparkles size={24} className="text-fg-faint" />
@@ -85,6 +97,32 @@ export function UserDashboard() {
           </div>
         ) : (
           <>
+            {sessionsBeingCreated.length > 0 && (
+              <section aria-live="polite">
+                <div className="mb-3 flex items-center gap-2">
+                  <Loader2 size={12} className="animate-spin text-primary" />
+                  <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">Creating</p>
+                  <span className="ml-auto text-[10px] text-fg-faint">Saving in the background</span>
+                </div>
+                <div className="space-y-3">
+                  {sessionsBeingCreated.map((session) => (
+                    <div key={session.id} className="rounded-xl border border-primary/25 bg-primary/[0.07] px-4 py-4 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10">
+                          <Loader2 size={17} className="animate-spin text-primary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-fg">{session.restaurantName || 'New bill'}</p>
+                          <p className="mt-0.5 text-xs text-primary">Setting up people and bill items…</p>
+                        </div>
+                        <p className="shrink-0 text-sm font-bold text-primary">{formatCurrency(session.totalAmount)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Outstanding bills */}
             {outstanding.length > 0 && (
               <section>

@@ -1,4 +1,8 @@
-import { useRef, useCallback, useState } from 'react'
+import {
+  useRef, useCallback, useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { Check, Sliders, Lock, CircleCheck, Clock3, TriangleAlert, Trash2, Users, Loader2 } from 'lucide-react'
 import type { BillItem, ItemSelection, User } from '../../types'
 import { formatCurrency, getAllocatedPortion } from '../../services/calculations'
@@ -39,6 +43,20 @@ function avatarColor(userId: string) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
 }
 
+const TOUCH_MOVE_TOLERANCE_PX = 12
+const SYNTHETIC_CLICK_GUARD_MS = 800
+
+// Mobile browsers can dispatch a delayed click after pointerup. Selection
+// immediately changes card height, so that click can otherwise hit the next
+// item. This guard is shared by every card to block cross-card ghost clicks.
+let suppressSyntheticItemClickUntil = 0
+
+function isNestedInteractiveTarget(target: EventTarget | null, card: HTMLElement) {
+  return target instanceof Element
+    && target !== card
+    && Boolean(target.closest('button, input, select, textarea, a, [data-item-card-interactive]'))
+}
+
 export function ItemCard({
   item,
   selection,
@@ -67,6 +85,12 @@ export function ItemCard({
   const [priceVal, setPriceVal] = useState(String(item.totalPrice))
   const [animClass, setAnimClass] = useState<string>('')
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchGesture = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    moved: boolean
+  } | null>(null)
 
   const isSelected = Boolean(selection)
   const selectionLocked = isLocked || !canEditSelection
@@ -111,6 +135,61 @@ export function ItemCard({
     }
   }, [selectionDisabled, isSelected, item.id, onSelect, onDeselect, triggerAnim])
 
+  const handleCardClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    // detail=0 is keyboard/assistive activation and must remain available.
+    if (event.detail !== 0 && Date.now() < suppressSyntheticItemClickUntil) {
+      event.preventDefault()
+      return
+    }
+    handleClick()
+  }, [handleClick])
+
+  const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (
+      event.pointerType !== 'touch'
+      || !event.isPrimary
+      || !showSelectionControl
+      || selectionDisabled
+      || isNestedInteractiveTarget(event.target, event.currentTarget)
+    ) return
+
+    // Suppress the browser-generated click for this touch across all cards.
+    suppressSyntheticItemClickUntil = Date.now() + SYNTHETIC_CLICK_GUARD_MS
+    touchGesture.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }, [selectionDisabled, showSelectionControl])
+
+  const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = touchGesture.current
+    if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved) return
+
+    const distance = Math.hypot(
+      event.clientX - gesture.startX,
+      event.clientY - gesture.startY,
+    )
+    if (distance > TOUCH_MOVE_TOLERANCE_PX) gesture.moved = true
+  }, [])
+
+  const finishTouchGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
+    const gesture = touchGesture.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+
+    touchGesture.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    // Movement means scrolling or a finger sliding across rows, never a tap.
+    if (cancelled || gesture.moved) return
+    event.preventDefault()
+    handleClick()
+  }, [handleClick])
+
   const commitName = () => {
     setEditingName(false)
     const trimmed = nameVal.trim()
@@ -128,7 +207,11 @@ export function ItemCard({
   return (
     <>
       <div
-        onClick={handleClick}
+        onClick={handleCardClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={(event) => finishTouchGesture(event)}
+        onPointerCancel={(event) => finishTouchGesture(event, true)}
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
           event.preventDefault()
@@ -141,7 +224,7 @@ export function ItemCard({
         aria-busy={isPending || undefined}
         aria-label={showSelectionControl ? `${item.name}: ${isSelected ? 'selected' : 'not selected'}` : undefined}
         className={clsx(
-          'relative flex min-h-11 items-start gap-3 overflow-hidden px-4 py-3.5 select-none transition-[background-color,opacity,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60',
+          'relative flex min-h-11 touch-pan-y touch-pinch-zoom items-start gap-3 overflow-hidden px-4 py-3.5 select-none transition-[background-color,opacity,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60',
           showSelectionControl ? 'cursor-pointer' : 'cursor-default',
           'active:bg-surface-overlay/40',
           equalSplitPending

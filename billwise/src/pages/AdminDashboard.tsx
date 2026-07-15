@@ -19,7 +19,10 @@ type Tab = 'sessions' | 'users' | 'settings'
 
 export function AdminDashboard() {
   const navigate = useNavigate()
-  const { sessions, currentUser, updateSession, deleteSession, users, billItems, selections } = useAppStore()
+  const {
+    sessions, pendingSessionIds, currentUser, updateSession, deleteSession,
+    users, billItems, selections, cloudReady, cloudSyncError,
+  } = useAppStore()
   const [tab, setTab] = useState<Tab>('sessions')
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null)
   const [visibilityPendingId, setVisibilityPendingId] = useState('')
@@ -100,6 +103,7 @@ export function AdminDashboard() {
                       onClick={() => navigate(`/session/${s.id}`)}
                       onTogglePublic={() => togglePublic(s)}
                       visibilityPending={visibilityPendingId === s.id}
+                      isSettingUp={pendingSessionIds.includes(s.id)}
                       onDelete={() => setSessionToDelete(s)}
                     />
                   ))}
@@ -120,6 +124,7 @@ export function AdminDashboard() {
                       onClick={() => navigate(`/session/${s.id}`)}
                       onTogglePublic={() => togglePublic(s)}
                       visibilityPending={visibilityPendingId === s.id}
+                      isSettingUp={pendingSessionIds.includes(s.id)}
                       onDelete={() => setSessionToDelete(s)}
                     />
                   ))}
@@ -127,7 +132,25 @@ export function AdminDashboard() {
               </section>
             )}
 
-            {sessions.length === 0 && (
+            {!cloudReady && sessions.length === 0 && (
+              <div className="space-y-3 py-4" role="status" aria-label="Loading sessions">
+                <div className="skeleton h-24 rounded-xl" />
+                <div className="skeleton h-24 rounded-xl" />
+                <p className="text-center text-xs text-fg-subtle">Checking for sessions…</p>
+              </div>
+            )}
+
+            {cloudReady && cloudSyncError && sessions.length === 0 && (
+              <div className="text-center py-12" role="status">
+                <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-line flex items-center justify-center mx-auto mb-4">
+                  <Loader2 size={24} className="animate-spin text-warning" />
+                </div>
+                <p className="text-sm font-medium text-fg-muted">Checking for sessions…</p>
+                <p className="text-xs text-fg-faint mt-1">Waiting for the live connection to recover</p>
+              </div>
+            )}
+
+            {cloudReady && !cloudSyncError && sessions.length === 0 && (
               <div className="text-center py-12">
                 <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-line flex items-center justify-center mx-auto mb-4">
                   <Sparkles size={24} className="text-fg-faint" />
@@ -491,7 +514,7 @@ const statusConfig = {
 }
 
 function AdminSessionCard({
-  session, users, onClick, onTogglePublic, onDelete, visibilityPending,
+  session, users, onClick, onTogglePublic, onDelete, visibilityPending, isSettingUp,
 }: {
   session: Session
   users: User[]
@@ -499,6 +522,7 @@ function AdminSessionCard({
   onTogglePublic: () => void
   onDelete: () => void
   visibilityPending: boolean
+  isSettingUp: boolean
 }) {
   const cfg = statusConfig[session.status]
   const StatusIcon = cfg.icon
@@ -514,6 +538,7 @@ function AdminSessionCard({
       {/* Main row — clickable */}
       <button
         onClick={onClick}
+        disabled={isSettingUp}
         className="group flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-surface-raised/50"
       >
         <div className="w-9 h-9 rounded-lg bg-surface-overlay border border-line flex items-center justify-center shrink-0">
@@ -522,8 +547,12 @@ function AdminSessionCard({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-fg truncate">{session.restaurantName || 'Unnamed Bill'}</p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <StatusIcon size={11} className={cfg.className} />
-            <span className={`text-xs ${cfg.className}`}>{cfg.label}</span>
+            {isSettingUp
+              ? <Loader2 size={11} className="animate-spin text-primary" />
+              : <StatusIcon size={11} className={cfg.className} />}
+            <span className={clsx('text-xs', isSettingUp ? 'text-primary' : cfg.className)}>
+              {isSettingUp ? 'Setting up…' : cfg.label}
+            </span>
             <span className="text-xs text-fg-faint">·</span>
             <span className="text-xs text-fg-subtle font-mono">{session.orderId}</span>
             <span className="text-xs text-fg-faint">·</span>
@@ -532,7 +561,9 @@ function AdminSessionCard({
         </div>
         <div className="text-right shrink-0">
           <p className="text-sm font-bold text-primary">{formatCurrency(session.totalAmount)}</p>
-          <p className="text-xs text-fg-subtle mt-0.5">{session.participantIds.length} people</p>
+          <p className="text-xs text-fg-subtle mt-0.5">
+            {isSettingUp ? 'Preparing details' : `${session.participantIds.length} people`}
+          </p>
         </div>
         <ChevronRight size={14} className="text-fg-faint group-hover:text-fg-muted transition-colors shrink-0" />
       </button>
@@ -541,7 +572,11 @@ function AdminSessionCard({
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/60 bg-canvas/40 px-4 py-2">
         {/* Lock progress */}
         <div className="flex items-center gap-2">
-          {participants.length > 0 ? (
+          {isSettingUp ? (
+            <span className="flex items-center gap-1.5 text-[10px] font-medium text-primary">
+              <Loader2 size={11} className="animate-spin" /> Adding people and bill items…
+            </span>
+          ) : participants.length > 0 ? (
             <>
               <div className="flex items-center gap-1">
                 {participants.map((p) => {
@@ -576,14 +611,15 @@ function AdminSessionCard({
         <div className="flex items-center gap-1.5">
           <button
             onClick={(e) => { e.stopPropagation(); onDelete() }}
-            className="flex min-h-11 items-center gap-1.5 rounded-lg border border-transparent px-3 text-xs text-fg-faint transition-[color,border-color,background-color] duration-150 hover:border-danger/25 hover:bg-danger/10 hover:text-danger"
+            disabled={isSettingUp}
+            className="flex min-h-11 items-center gap-1.5 rounded-lg border border-transparent px-3 text-xs text-fg-faint transition-[color,border-color,background-color] duration-150 hover:border-danger/25 hover:bg-danger/10 hover:text-danger disabled:pointer-events-none disabled:opacity-60"
             title="Delete session"
           >
             <Trash2 size={10} /> Delete
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onTogglePublic() }}
-            disabled={visibilityPending}
+            disabled={visibilityPending || isSettingUp}
             aria-pressed={session.isPublic}
             aria-label={session.isPublic ? 'Hide session from landing page' : 'Show session on landing page'}
             title={session.isPublic ? 'Shown on landing page — click to hide' : 'Hidden from landing page — click to show'}
@@ -594,10 +630,12 @@ function AdminSessionCard({
                 : 'bg-surface-overlay border-line text-fg-subtle hover:text-fg-muted',
             )}
           >
-            {visibilityPending
+            {isSettingUp
+              ? <><Loader2 size={12} className="animate-spin" /> Saving…</>
+              : visibilityPending
               ? <Loader2 size={12} className="animate-spin" />
               : session.isPublic ? <Eye size={12} /> : <EyeOff size={12} />}
-            {session.isPublic ? 'On landing' : 'Off landing'}
+            {!isSettingUp && (session.isPublic ? 'On landing' : 'Off landing')}
           </button>
         </div>
       </div>
