@@ -28,7 +28,6 @@ export function NewSessionPage() {
   const [newMemberPin, setNewMemberPin] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [creationStep, setCreationStep] = useState('')
-  const [showBillReady, setShowBillReady] = useState(false)
 
   const regularUsers = users.filter((u) => u.role === 'user')
 
@@ -36,7 +35,6 @@ export function NewSessionPage() {
     setParsedBill(bill)
     setImageDataUrl(image ?? '')
     setStep('participants')
-    setShowBillReady(true)
   }
 
   const toggleUser = (id: string) => {
@@ -145,11 +143,17 @@ export function NewSessionPage() {
 
         {step === 'participants' && (
           <div className="animate-slide-up space-y-4">
-            <div className="rounded-xl border border-primary/25 bg-primary/[0.08] px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Step 2 of 2 · Choose people</p>
-              <p className="mt-1 text-xs text-fg-subtle">
-                Select members now. After this, the session opens to choose items from the uploaded bill.
-              </p>
+            <div className="flex items-start gap-3 rounded-xl border border-success/25 bg-success/[0.07] px-4 py-3">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+                <Check size={14} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wider text-success">Bill ready · Step 2 of 2</p>
+                <p className="mt-1 text-sm font-semibold text-fg">Choose the people on this bill</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-fg-subtle">
+                  After the session is created, everyone can choose their items and portions.
+                </p>
+              </div>
             </div>
             <div>
               <p className="text-sm font-semibold text-fg mb-1">Who joined?</p>
@@ -263,34 +267,6 @@ export function NewSessionPage() {
           </div>
         )}
       </div>
-
-      <Modal
-        open={showBillReady}
-        onClose={() => setShowBillReady(false)}
-        title="Bill uploaded"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-xl border border-success/20 bg-success/[0.07] px-4 py-3">
-            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
-              <Check size={14} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-fg">Bill uploaded. Now choose people.</p>
-              <p className="mt-1 text-xs leading-relaxed text-fg-subtle">
-                Select the people on this bill, then create the session. The next screen is where everyone chooses their items and portions.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowBillReady(false)}
-            className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-all hover:bg-primary-hover active:scale-98"
-          >
-            Choose people
-          </button>
-        </div>
-      </Modal>
 
       <Modal
         open={isCreating}

@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState } from 'react'
-import { Check, Sliders, Lock, CircleCheck, Clock3, TriangleAlert, Trash2 } from 'lucide-react'
+import { Check, Sliders, Lock, CircleCheck, Clock3, TriangleAlert, Trash2, Users, Loader2 } from 'lucide-react'
 import type { BillItem, ItemSelection, User } from '../../types'
 import { formatCurrency, getAllocatedPortion } from '../../services/calculations'
 import { Modal } from '../shared/Modal'
@@ -11,12 +11,14 @@ interface ItemCardProps {
   selection?: ItemSelection
   itemSelections: ItemSelection[]  // all selections for this item (all users)
   participants: User[]             // all session participants
+  lockedParticipantIds: string[]
   currentUserId: string
   isLocked: boolean
   isAdmin: boolean
   canEditBill?: boolean
   canEditSelection?: boolean
   showSelectionControl?: boolean
+  isPending?: boolean
   onSelect: (itemId: string) => void
   onDeselect: (itemId: string) => void
   onPortionChange: (itemId: string, portion: number) => void
@@ -25,8 +27,6 @@ interface ItemCardProps {
   onEditQuantity?: (itemId: string, quantity: number) => void
   onDelete?: (itemId: string) => void
 }
-
-const LONG_PRESS_MS = 600
 
 // Stable colors per user (hash-based, dark-palette friendly)
 const AVATAR_COLORS = [
@@ -44,12 +44,14 @@ export function ItemCard({
   selection,
   itemSelections,
   participants,
+  lockedParticipantIds,
   currentUserId,
   isLocked,
   isAdmin,
   canEditBill = false,
   canEditSelection = true,
   showSelectionControl = true,
+  isPending = false,
   onSelect,
   onDeselect,
   onPortionChange,
@@ -64,20 +66,23 @@ export function ItemCard({
   const [nameVal, setNameVal] = useState(item.name)
   const [priceVal, setPriceVal] = useState(String(item.totalPrice))
   const [animClass, setAnimClass] = useState<string>('')
-  const [lastClickTime, setLastClickTime] = useState(0)
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const longPressTriggered = useRef(false)
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isSelected = Boolean(selection)
   const selectionLocked = isLocked || !canEditSelection
+  const selectionDisabled = selectionLocked || isPending
   const billEditingEnabled = canEditBill && !isLocked
   const portion = selection?.portionPercentage ?? 100
   const isSplit = portion < 100
   const myAmount = isSelected ? item.totalPrice * (portion / 100) : 0
   const allocatedPortion = getAllocatedPortion(itemSelections)
-  const allocationComplete = allocatedPortion >= 99.99 && allocatedPortion <= 100.01
   const allocationOver = allocatedPortion > 100.01
+  const equalShareSelections = itemSelections.filter((itemSelection) => itemSelection.portionPercentage === 100)
+  const allParticipantsLocked = participants.length > 0
+    && participants.every((participant) => lockedParticipantIds.includes(participant.id))
+  const equalSplitPending = equalShareSelections.length > 0 && !allParticipantsLocked && !allocationOver
+  const allocationComplete = !equalSplitPending && allocatedPortion >= 99.99 && allocatedPortion <= 100.01
+  const provisionalEqualSelection = isSelected && portion === 100 && equalSplitPending
   const displayAllocated = allocationComplete ? 100 : allocatedPortion
   const pendingPortion = Math.max(0, Math.round((100 - allocatedPortion) * 100) / 100)
   const progressWidth = Math.min(100, Math.max(0, allocatedPortion))
@@ -91,47 +96,12 @@ export function ItemCard({
   }, [])
 
   const triggerPortionSlider = useCallback(() => {
-    if (selectionLocked) return
-    if (!isSelected) onSelect(item.id)
-    triggerAnim('anim-secret-ripple')
-    setTimeout(() => setShowSlider(true), 120)
-  }, [selectionLocked, isSelected, item.id, onSelect, triggerAnim])
+    if (selectionDisabled) return
+    setShowSlider(true)
+  }, [selectionDisabled])
 
-  // Long press
-  const handlePointerDown = useCallback(() => {
-    if (selectionLocked) return
-    longPressTriggered.current = false
-    longPressTimer.current = setTimeout(() => {
-      longPressTimer.current = null
-      longPressTriggered.current = true
-      triggerPortionSlider()
-    }, LONG_PRESS_MS)
-  }, [selectionLocked, triggerPortionSlider])
-
-  const cancelLongPress = useCallback(() => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current)
-    longPressTimer.current = null
-  }, [])
-
-  // Double-click on selected → portion slider; single click → toggle select
   const handleClick = useCallback(() => {
-    if (selectionLocked) return
-    if (longPressTriggered.current) {
-      longPressTriggered.current = false
-      return
-    }
-    const now = Date.now()
-    const sinceLastClick = now - lastClickTime
-    setLastClickTime(now)
-
-    if (sinceLastClick < 350 && isSelected) {
-      // Double-click on selected item → open slider
-      cancelLongPress()
-      triggerPortionSlider()
-      return
-    }
-
-    // Single click — toggle
+    if (selectionDisabled) return
     if (isSelected) {
       triggerAnim('anim-deselect')
       onDeselect(item.id)
@@ -139,7 +109,7 @@ export function ItemCard({
       triggerAnim('anim-select')
       onSelect(item.id)
     }
-  }, [selectionLocked, lastClickTime, isSelected, item.id, onSelect, onDeselect, triggerPortionSlider, cancelLongPress, triggerAnim])
+  }, [selectionDisabled, isSelected, item.id, onSelect, onDeselect, triggerAnim])
 
   const commitName = () => {
     setEditingName(false)
@@ -158,15 +128,25 @@ export function ItemCard({
   return (
     <>
       <div
-        onPointerDown={handlePointerDown}
-        onPointerUp={cancelLongPress}
-        onPointerLeave={cancelLongPress}
         onClick={handleClick}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
+          event.preventDefault()
+          handleClick()
+        }}
+        role={showSelectionControl ? 'button' : undefined}
+        tabIndex={showSelectionControl && !selectionDisabled ? 0 : undefined}
+        aria-pressed={showSelectionControl ? isSelected : undefined}
+        aria-disabled={showSelectionControl ? selectionDisabled : undefined}
+        aria-busy={isPending || undefined}
+        aria-label={showSelectionControl ? `${item.name}: ${isSelected ? 'selected' : 'not selected'}` : undefined}
         className={clsx(
-          'relative flex items-start gap-3 px-4 py-3.5 select-none overflow-hidden transition-all duration-500',
+          'relative flex min-h-11 items-start gap-3 overflow-hidden px-4 py-3.5 select-none transition-[background-color,opacity,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60',
           showSelectionControl ? 'cursor-pointer' : 'cursor-default',
           'active:bg-surface-overlay/40',
-          allocationComplete
+          equalSplitPending
+            ? 'bg-gradient-to-r from-info/[0.10] to-transparent'
+            : allocationComplete
             ? 'bg-gradient-to-r from-success/[0.13] via-success/[0.04] to-transparent anim-allocation-complete'
             : allocationOver
               ? 'bg-gradient-to-r from-danger/[0.12] to-transparent'
@@ -180,10 +160,12 @@ export function ItemCard({
         {/* Checkbox */}
         {showSelectionControl && (
           <div className={clsx(
-            'mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200',
+            'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-[background-color,border-color,transform] duration-150',
             isSelected ? 'bg-primary border-primary scale-110' : 'border-line-strong bg-transparent scale-100',
           )}>
-            {isSelected && <Check size={11} strokeWidth={3} className="text-primary-fg" />}
+            {isPending
+              ? <Loader2 size={11} className="animate-spin text-primary" />
+              : isSelected && <Check size={11} strokeWidth={3} className="text-primary-fg" />}
           </div>
         )}
 
@@ -268,16 +250,28 @@ export function ItemCard({
               ) : (
                 <p
                   className={clsx(
-                    'text-sm font-semibold transition-all',
-                    isSelected ? 'text-primary' : 'text-fg-muted',
+                    'text-sm font-semibold transition-[color,transform] duration-150',
+                    provisionalEqualSelection ? 'text-info' : isSelected ? 'text-primary' : 'text-fg-muted',
                     billEditingEnabled && 'cursor-text hover:text-primary',
                   )}
                   onDoubleClick={billEditingEnabled ? (e) => { e.stopPropagation(); setEditingPrice(true) } : undefined}
                 >
-                  {isSelected ? formatCurrency(myAmount) : formatCurrency(item.totalPrice)}
+                  {provisionalEqualSelection
+                    ? 'Equal split'
+                    : isSelected ? formatCurrency(myAmount) : formatCurrency(item.totalPrice)}
                 </p>
               )}
-              {isSplit && isSelected && (
+              <p className={clsx(
+                'mt-0.5 text-[10px]',
+                isSelected ? selectionLocked ? 'text-success' : 'text-fg-subtle' : 'text-fg-faint',
+              )}>
+                {!isSelected
+                  ? 'Not selected'
+                  : selectionLocked
+                    ? 'Locked allocation'
+                    : provisionalEqualSelection ? 'Ready for equal split' : 'Selected'}
+              </p>
+              {!provisionalEqualSelection && isSplit && isSelected && (
                 <p className="text-[10px] text-fg-subtle mt-0.5 flex items-center gap-1 justify-end">
                   <Sliders size={8} />
                   {portion}% of {formatCurrency(item.totalPrice)}
@@ -287,43 +281,57 @@ export function ItemCard({
           </div>
 
           {/* Item allocation status */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2 text-[10px] font-medium">
-              <span className={clsx(
-                'flex items-center gap-1',
-                allocationComplete
-                  ? 'text-success'
-                  : allocationOver
-                    ? 'text-danger'
-                    : allocatedPortion > 0 ? 'text-warning' : 'text-fg-faint',
-              )}>
-                {allocationComplete
-                  ? <CircleCheck size={11} />
-                  : allocationOver
-                    ? <TriangleAlert size={11} />
-                    : <Clock3 size={11} />}
-                {allocationComplete
-                  ? '100% allocated · Complete'
-                  : allocationOver
-                    ? `${displayAllocated}% allocated · ${Math.round((allocatedPortion - 100) * 100) / 100}% over`
-                    : `${displayAllocated}% allocated · ${pendingPortion}% pending`}
-              </span>
-              {!allocationComplete && !allocationOver && allocatedPortion > 0 && (
-                <span className="text-fg-faint">{formatCurrency(item.totalPrice * pendingPortion / 100)} left</span>
-              )}
+          {equalSplitPending ? (
+            <div className="flex items-start gap-2 rounded-lg border border-info/20 bg-info/[0.07] px-2.5 py-2">
+              <Users size={12} className="mt-0.5 shrink-0 text-info" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold text-info">
+                  {equalShareSelections.length} {equalShareSelections.length === 1 ? 'person is' : 'people are'} ready to split equally
+                </p>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-fg-subtle">
+                  Final shares are calculated after everyone locks their choices.
+                </p>
+              </div>
             </div>
-            <div className="h-1 rounded-full bg-surface-overlay/80 overflow-hidden">
-              <div
-                className={clsx(
-                  'h-full rounded-full transition-all duration-700 ease-out',
+          ) : (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2 text-[10px] font-medium">
+                <span className={clsx(
+                  'flex items-center gap-1',
                   allocationComplete
-                    ? 'bg-success'
-                    : allocationOver ? 'bg-danger' : allocatedPortion > 0 ? 'bg-warning' : 'bg-surface-hover',
+                    ? 'text-success'
+                    : allocationOver
+                      ? 'text-danger'
+                      : allocatedPortion > 0 ? 'text-warning' : 'text-fg-faint',
+                )}>
+                  {allocationComplete
+                    ? <CircleCheck size={11} />
+                    : allocationOver
+                      ? <TriangleAlert size={11} />
+                      : <Clock3 size={11} />}
+                  {allocationComplete
+                    ? '100% allocated · Complete'
+                    : allocationOver
+                      ? `${displayAllocated}% allocated · ${Math.round((allocatedPortion - 100) * 100) / 100}% over`
+                      : `${displayAllocated}% allocated · ${pendingPortion}% pending`}
+                </span>
+                {!allocationComplete && !allocationOver && allocatedPortion > 0 && (
+                  <span className="text-fg-faint">{formatCurrency(item.totalPrice * pendingPortion / 100)} left</span>
                 )}
-                style={{ width: `${progressWidth}%` }}
-              />
+              </div>
+              <div className="h-1 rounded-full bg-surface-overlay/80 overflow-hidden">
+                <div
+                  className={clsx(
+                    'h-full rounded-full transition-[width,background-color] duration-200 ease-out',
+                    allocationComplete
+                      ? 'bg-success'
+                      : allocationOver ? 'bg-danger' : allocatedPortion > 0 ? 'bg-warning' : 'bg-surface-hover',
+                  )}
+                  style={{ width: `${progressWidth}%` }}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Participant avatars row */}
           {itemSelections.length > 0 && (
@@ -360,6 +368,9 @@ export function ItemCard({
                     {isSplitSel && (
                       <span className="opacity-70">{sel.portionPercentage}%</span>
                     )}
+                    {!isSplitSel && (
+                      <span className="opacity-70">Equal</span>
+                    )}
                     {isUserLocked && (
                       <Lock size={8} className="opacity-60" style={{ color }} />
                     )}
@@ -369,23 +380,26 @@ export function ItemCard({
             </div>
           )}
 
-          {/* Hint when selected and not locked */}
-          {selection && !selectionLocked && (
+          {selection && (
             <div className="flex items-center gap-2">
+              {selectionLocked ? (
+                <span className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-success/25 bg-success/10 px-3 text-[10px] font-medium text-success">
+                  <Lock size={11} /> Locked allocation
+                </span>
+              ) : (
               <button
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation()
                   triggerPortionSlider()
                 }}
-                className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-raised px-2 py-1 text-[10px] font-medium text-fg-muted hover:border-primary/30 hover:text-primary transition-colors"
+                disabled={isPending}
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-surface-raised px-3 text-xs font-medium text-fg-muted transition-[color,border-color,background-color] duration-150 hover:border-primary/30 hover:text-primary disabled:opacity-60"
               >
-                <Sliders size={10} />
+                <Sliders size={12} />
                 Portion
               </button>
-              <p className="text-[10px] text-fg-faint leading-none">
-                hold or double-tap also works
-              </p>
+              )}
             </div>
           )}
         </div>

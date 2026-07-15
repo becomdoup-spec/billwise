@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useSessionSync } from '../hooks/useSessionSync'
 import {
@@ -28,7 +28,7 @@ export function SessionPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const {
-    sessions, users, billItems, currentUser,
+    sessions, users, billItems, currentUser, cloudReady,
     selections, setSelection, removeSelection,
     lockUserSelections, unlockUserSelections,
     addParticipant, removeParticipant,
@@ -45,8 +45,11 @@ export function SessionPage() {
   const [showBillEditor, setShowBillEditor] = useState(false)
   const [billEditorDrafts, setBillEditorDrafts] = useState<Record<string, BillEditorDraft>>({})
   const [billEditorSaving, setBillEditorSaving] = useState(false)
-  const [showChooseItemsIntro, setShowChooseItemsIntro] = useState(false)
-  const [showLockDoneModal, setShowLockDoneModal] = useState(false)
+  const [pendingItemIds, setPendingItemIds] = useState<string[]>([])
+  const [pendingParticipantIds, setPendingParticipantIds] = useState<string[]>([])
+  const [locking, setLocking] = useState(false)
+  const [lockSuccess, setLockSuccess] = useState(false)
+  const [unlocking, setUnlocking] = useState(false)
   const [newItemName, setNewItemName] = useState('')
   const [newItemPrice, setNewItemPrice] = useState('')
 
@@ -56,21 +59,17 @@ export function SessionPage() {
   const isAdmin = currentUser?.role === 'admin'
   const isCreator = !isAdmin && session?.createdBy === currentUser?.id
 
-  useEffect(() => {
-    if (!session || !currentUser || currentUser.role === 'admin') return
-    if (!session.participantIds.includes(currentUser.id)) return
-    if ((session.lockedParticipantIds ?? []).includes(currentUser.id)) return
-
-    const introKey = `billwise:choose-items-intro:${session.id}:${currentUser.id}`
-    if (window.localStorage.getItem(introKey)) return
-    setShowChooseItemsIntro(true)
-  }, [
-    session?.id,
-    session?.participantIds.join('|'),
-    session?.lockedParticipantIds?.join('|'),
-    currentUser?.id,
-    currentUser?.role,
-  ])
+  if (!session && !cloudReady) return (
+    <Layout>
+      <Header title="Loading session" back />
+      <div className="flex flex-1 flex-col gap-3 p-4" role="status" aria-label="Loading session">
+        <div className="skeleton h-20 rounded-xl" />
+        <div className="skeleton h-12 rounded-xl" />
+        <div className="skeleton h-28 rounded-xl" />
+        <div className="skeleton h-28 rounded-xl" />
+      </div>
+    </Layout>
+  )
 
   if (!session) return (
     <Layout>
@@ -126,13 +125,6 @@ export function SessionPage() {
   const allParticipantsLocked = completionState.everyoneLocked
   const hasBillImage = Boolean(session.billImageBase64 || session.billImageUrl)
   const canEditBillContents = isAdmin || isCreator
-
-  const dismissChooseItemsIntro = () => {
-    if (currentUser) {
-      window.localStorage.setItem(`billwise:choose-items-intro:${session.id}:${currentUser.id}`, 'seen')
-    }
-    setShowChooseItemsIntro(false)
-  }
 
   const openBillEditor = () => {
     setBillEditorDrafts(Object.fromEntries(
@@ -262,58 +254,71 @@ export function SessionPage() {
   }
 
   const handleSelect = async (itemId: string) => {
-    if (!selectionUserId || (!isAdmin && isSessionLocked)) return
+    if (!selectionUserId || (!isAdmin && isSessionLocked) || pendingItemIds.includes(itemId)) return
+    setPendingItemIds((ids) => [...ids, itemId])
     try {
       await setSelection(session.id, selectionUserId, itemId, 100)
     } catch {
       toast.error('Selection could not be saved')
+    } finally {
+      setPendingItemIds((ids) => ids.filter((id) => id !== itemId))
     }
   }
 
   const handleDeselect = async (itemId: string) => {
-    if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked))) return
+    if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked)) || pendingItemIds.includes(itemId)) return
+    setPendingItemIds((ids) => [...ids, itemId])
     try {
       await removeSelection(session.id, selectionUserId, itemId)
     } catch {
       toast.error('Selection could not be removed')
+    } finally {
+      setPendingItemIds((ids) => ids.filter((id) => id !== itemId))
     }
   }
 
   const handlePortion = async (itemId: string, portion: number) => {
-    if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked))) return
+    if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked)) || pendingItemIds.includes(itemId)) return
+    setPendingItemIds((ids) => [...ids, itemId])
     try {
       await setSelection(session.id, selectionUserId, itemId, portion)
     } catch {
       toast.error('Portion could not be saved')
+    } finally {
+      setPendingItemIds((ids) => ids.filter((id) => id !== itemId))
     }
   }
 
   const handleLockMine = async () => {
+    if (locking) return
+    setLocking(true)
     try {
       await lockUserSelections(session.id, viewingUserId)
-      setShowLockDoneModal(true)
+      setLockSuccess(true)
+      window.setTimeout(() => navigate('/user'), 650)
     } catch {
       toast.error('Selections could not be locked')
+      setLocking(false)
     }
   }
 
-  const closeLockDoneModal = () => {
-    setShowLockDoneModal(false)
-    navigate('/user')
-  }
-
   const handleUnlockMine = async () => {
+    if (unlocking) return
+    setUnlocking(true)
     try {
       await unlockUserSelections(session.id, viewingUserId)
       toast.info('Selections unlocked — you can edit again')
     } catch {
       toast.error('Selections could not be unlocked')
+    } finally {
+      setUnlocking(false)
     }
   }
 
   const lockedCount = participants.filter((p) =>
     (session.lockedParticipantIds ?? []).includes(p.id),
   ).length
+  const tabIndex = (['items', 'split', 'people'] as Tab[]).indexOf(tab)
 
   const exportImage = async () => {
     if (!isSessionComplete) {
@@ -363,16 +368,17 @@ export function SessionPage() {
                 }
                 navigate('/admin')
               }}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border bg-primary/15 border-primary/30 text-primary hover:bg-primary/25 transition-all"
+              className="flex min-h-11 items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/15 px-3 py-2 text-xs text-primary transition-colors duration-150 hover:bg-primary/25"
             >
               <CheckCircle size={12} /> Done
             </button>
-          ) : myLocked ? (
+          ) : myLocked && !lockSuccess ? (
             <button
               onClick={handleUnlockMine}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border bg-surface border-line text-fg-muted hover:bg-surface-raised hover:text-fg transition-all active:scale-95"
+              disabled={unlocking}
+              className="flex min-h-11 items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-xs text-fg-muted transition-[color,background-color,transform] duration-150 hover:bg-surface-raised hover:text-fg active:scale-95 disabled:opacity-60"
             >
-              <Lock size={12} /> Unlock
+              {unlocking ? <Loader2 size={12} className="animate-spin" /> : <Lock size={12} />} Unlock
             </button>
           ) : undefined
         }
@@ -398,7 +404,7 @@ export function SessionPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex shrink-0 border-b border-line px-4 gap-1">
+      <div className="relative flex shrink-0 gap-1 border-b border-line px-4" role="tablist" aria-label="Session views">
         {([
           { id: 'items', label: 'Items', icon: Receipt },
           { id: 'split', label: 'Split', icon: BarChart3 },
@@ -407,23 +413,46 @@ export function SessionPage() {
           <button
             key={tid}
             onClick={() => setTab(tid)}
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+              event.preventDefault()
+              const tabs: Tab[] = ['items', 'split', 'people']
+              const nextIndex = event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? tabs.length - 1
+                  : (tabs.indexOf(tid) + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+              const nextTab = tabs[nextIndex]
+              setTab(nextTab)
+              window.requestAnimationFrame(() => document.getElementById(`session-tab-${nextTab}`)?.focus())
+            }}
+            id={`session-tab-${tid}`}
+            role="tab"
+            aria-selected={tab === tid}
+            aria-controls={`session-panel-${tid}`}
+            tabIndex={tab === tid ? 0 : -1}
             className={clsx(
-              'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px',
+              'flex min-h-11 flex-1 items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors duration-150',
               tab === tid
-                ? 'text-primary border-primary'
-                : 'text-fg-subtle border-transparent hover:text-fg-muted',
+                ? 'text-primary'
+                : 'text-fg-subtle hover:text-fg-muted',
             )}
           >
             <Icon size={13} />
             {label}
           </button>
         ))}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 left-4 h-0.5 w-[calc((100%_-_2rem)/3)] rounded-full bg-primary transition-transform duration-[180ms] ease-out"
+          style={{ transform: `translateX(${tabIndex * 100}%)` }}
+        />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Items tab */}
         {tab === 'items' && (
-          <div className="pb-32">
+          <div id="session-panel-items" role="tabpanel" aria-labelledby="session-tab-items" className="animate-tab-enter pb-32">
             {/* Coverage warning */}
             {isAdmin && hasCoverageIssues && (
               <div className="mx-4 mt-3">
@@ -436,7 +465,7 @@ export function SessionPage() {
                   {expandCoverage ? <ChevronUp size={14} className="text-warning" /> : <ChevronDown size={14} className="text-warning" />}
                 </button>
                 {expandCoverage && (
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-2 space-y-1 animate-reveal">
                     {selectableItems.map((item) => {
                       const cov = coverage[item.id] ?? 0
                       if (isPortionFullyAllocated(cov)) return null
@@ -519,12 +548,14 @@ export function SessionPage() {
                     selection={mySelection}
                     itemSelections={sessionSelections.filter((s) => s.itemId === item.id)}
                     participants={participants}
+                    lockedParticipantIds={session.lockedParticipantIds ?? []}
                     currentUserId={selectionUserId}
                     isLocked={!isAdmin && (isSessionLocked || myLocked)}
                     isAdmin={isAdmin}
                     canEditBill={false}
                     canEditSelection={!isAdmin || Boolean(editingUser)}
                     showSelectionControl={!isAdmin || Boolean(editingUser)}
+                    isPending={pendingItemIds.includes(item.id)}
                     onSelect={handleSelect}
                     onDeselect={handleDeselect}
                     onPortionChange={handlePortion}
@@ -556,7 +587,7 @@ export function SessionPage() {
             {!isAdmin && hasBillImage && (
               <button
                 onClick={handleViewBillImage}
-                className="mx-4 mt-3 w-[calc(100%_-_2rem)] flex items-center justify-center gap-2 bg-surface border border-line hover:border-primary/30 rounded-xl px-4 py-3 text-xs font-medium text-fg-muted hover:text-fg transition-all"
+                className="mx-4 mt-3 flex min-h-11 w-[calc(100%_-_2rem)] items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-xs font-medium text-fg-muted transition-[color,border-color] duration-150 hover:border-primary/30 hover:text-fg"
               >
                 <FileImage size={14} className="text-primary" /> View original bill
               </button>
@@ -566,7 +597,7 @@ export function SessionPage() {
 
         {/* Split tab */}
         {tab === 'split' && (
-          <div className="p-4 space-y-4">
+          <div id="session-panel-split" role="tabpanel" aria-labelledby="session-tab-split" className="animate-tab-enter space-y-4 p-4">
             {/* Live lock status */}
             <div className="bg-surface border border-line rounded-2xl overflow-hidden">
               <div className="px-4 py-3 border-b border-line flex items-center justify-between">
@@ -582,7 +613,7 @@ export function SessionPage() {
                   <div
                     key={user.id}
                     className={clsx(
-                      'flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all',
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-[color,background-color,border-color] duration-150',
                       done
                         ? 'bg-success/10 border-success/25 text-success'
                         : 'bg-warning/10 border-warning/25 text-warning',
@@ -621,7 +652,7 @@ export function SessionPage() {
                     <button
                       onClick={exportImage}
                       disabled={Boolean(exporting)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-surface text-[11px] text-fg-muted hover:text-fg hover:border-primary/30 disabled:opacity-50 transition-all"
+                      className="flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[11px] text-fg-muted transition-[color,border-color,opacity] duration-150 hover:border-primary/30 hover:text-fg disabled:opacity-50"
                     >
                       {exporting === 'image'
                         ? <Loader2 size={11} className="animate-spin" />
@@ -631,7 +662,7 @@ export function SessionPage() {
                     <button
                       onClick={exportPdf}
                       disabled={Boolean(exporting)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-surface text-[11px] text-fg-muted hover:text-fg hover:border-primary/30 disabled:opacity-50 transition-all"
+                      className="flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[11px] text-fg-muted transition-[color,border-color,opacity] duration-150 hover:border-primary/30 hover:text-fg disabled:opacity-50"
                     >
                       {exporting === 'pdf'
                         ? <Loader2 size={11} className="animate-spin" />
@@ -646,7 +677,7 @@ export function SessionPage() {
                     <div
                       key={s.userId}
                       className={clsx(
-                        'rounded-2xl border p-4 space-y-2 transition-all',
+                        'rounded-2xl border p-4 space-y-2 transition-[background-color,border-color] duration-150',
                         isMe
                           ? 'bg-primary/10 border-primary/30'
                           : 'bg-surface border-line',
@@ -709,13 +740,14 @@ export function SessionPage() {
 
         {/* People tab */}
         {tab === 'people' && (
-          <div className="p-4 space-y-3 animate-list">
+          <div id="session-panel-people" role="tabpanel" aria-labelledby="session-tab-people" className="animate-tab-enter space-y-3 p-4">
             <p className="text-xs font-medium text-fg-subtle uppercase tracking-wider">Participants ({participants.length})</p>
             {participants.map((user) => {
               const userSels = sessionSelections.filter((s) => s.userId === user.id)
               const isUserLocked = isParticipantDone(session, user.id)
               const isUserDone = isUserLocked
               const userSplit = splits.find((s) => s.userId === user.id)
+              const participantPending = pendingParticipantIds.includes(user.id)
 
               return (
                 <div key={user.id} className="flex items-center gap-3 bg-surface border border-line rounded-xl px-4 py-3">
@@ -741,7 +773,7 @@ export function SessionPage() {
                     {isAdmin && (
                       <button
                         onClick={() => { setEditingUserId(user.id); setTab('items') }}
-                        className="mt-1.5 flex items-center gap-1 text-xs text-primary hover:text-primary-hover transition-colors"
+                        className="mt-1 flex min-h-11 items-center gap-1 rounded-lg pr-2 text-xs text-primary transition-colors hover:text-primary-hover"
                       >
                         <Pencil size={10} /> View / edit selections
                       </button>
@@ -756,6 +788,8 @@ export function SessionPage() {
                     {isAdmin && (
                       <button
                         onClick={async () => {
+                          if (participantPending) return
+                          setPendingParticipantIds((ids) => [...ids, user.id])
                           try {
                             if (isUserLocked) {
                               await unlockUserSelections(session.id, user.id)
@@ -766,15 +800,19 @@ export function SessionPage() {
                             }
                           } catch {
                             toast.error(`${user.name}'s status could not be saved`)
+                          } finally {
+                            setPendingParticipantIds((ids) => ids.filter((id) => id !== user.id))
                           }
                         }}
+                        disabled={participantPending}
                         className={clsx(
-                          'text-xs mt-1 transition-colors',
+                          'mt-1 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs transition-colors disabled:opacity-60',
                           isUserDone
                             ? 'text-success hover:text-success'
                             : 'text-warning hover:text-warning',
                         )}
                       >
+                        {participantPending && <Loader2 size={11} className="animate-spin" />}
                         {isUserLocked ? 'Mark pending' : 'Mark done'}
                       </button>
                     )}
@@ -782,16 +820,22 @@ export function SessionPage() {
                   {isAdmin && (
                     <button
                       onClick={async () => {
+                        if (participantPending) return
+                        setPendingParticipantIds((ids) => [...ids, user.id])
                         try {
                           await removeParticipant(session.id, user.id)
                           toast.info(`${user.name} removed`)
                         } catch {
                           toast.error(`${user.name} could not be removed`)
+                        } finally {
+                          setPendingParticipantIds((ids) => ids.filter((id) => id !== user.id))
                         }
                       }}
-                      className="p-1.5 text-fg-faint hover:text-danger transition-colors"
+                      disabled={participantPending}
+                      aria-label={`Remove ${user.name}`}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-fg-faint transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-50"
                     >
-                      <UserMinus size={14} />
+                      {participantPending ? <Loader2 size={14} className="animate-spin" /> : <UserMinus size={14} />}
                     </button>
                   )}
                 </div>
@@ -805,20 +849,27 @@ export function SessionPage() {
                   <button
                     key={user.id}
                     onClick={async () => {
+                      if (pendingParticipantIds.includes(user.id)) return
+                      setPendingParticipantIds((ids) => [...ids, user.id])
                       try {
                         await addParticipant(session.id, user.id)
                         toast.success(`${user.name} added`)
                       } catch {
                         toast.error(`${user.name} could not be added`)
+                      } finally {
+                        setPendingParticipantIds((ids) => ids.filter((id) => id !== user.id))
                       }
                     }}
-                    className="w-full flex items-center gap-3 bg-surface border border-line border-dashed hover:border-primary/30 rounded-xl px-4 py-3 mb-2 transition-all"
+                    disabled={pendingParticipantIds.includes(user.id)}
+                    className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-xl border border-dashed border-line bg-surface px-4 py-3 transition-[border-color,opacity] duration-150 hover:border-primary/30 disabled:opacity-60"
                   >
                     <div className="w-8 h-8 rounded-lg bg-surface-overlay flex items-center justify-center text-xs font-bold text-fg-subtle">
                       {user.name[0]?.toUpperCase()}
                     </div>
                     <span className="text-sm text-fg-subtle flex-1 text-left">{user.name}</span>
-                    <UserPlus size={14} className="text-fg-faint" />
+                    {pendingParticipantIds.includes(user.id)
+                      ? <Loader2 size={14} className="animate-spin text-primary" />
+                      : <UserPlus size={14} className="text-fg-faint" />}
                   </button>
                 ))}
               </div>
@@ -828,18 +879,28 @@ export function SessionPage() {
       </div>
 
       {/* Bottom action bar */}
-      {!isAdmin && !isSessionLocked && tab === 'items' && !myLocked && (
+      {!isAdmin && tab === 'items' && (lockSuccess || (!isSessionLocked && !myLocked)) && (
         <div className="shrink-0 border-t border-line bg-canvas/95 backdrop-blur-sm px-4 py-3 pb-safe">
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-fg-subtle">
               <span>{mySelections.length} item{mySelections.length !== 1 ? 's' : ''} selected</span>
-              <span>Review before locking</span>
+              <span>{lockSuccess ? 'Saved successfully' : 'Review before locking'}</span>
             </div>
             <button
               onClick={handleLockMine}
-              className="w-full py-3 bg-primary hover:bg-primary-hover btn-sheen shadow-glow disabled:shadow-none rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-98"
+              disabled={locking || lockSuccess}
+              className={clsx(
+                'flex min-h-11 w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-[background-color,box-shadow,transform] duration-150 active:scale-[0.98] disabled:shadow-none',
+                lockSuccess
+                  ? 'border border-success/30 bg-success/15 text-success'
+                  : 'bg-primary text-primary-fg shadow-glow hover:bg-primary-hover',
+              )}
             >
-              Lock My Selections
+              {lockSuccess
+                ? <><CheckCircle size={16} /> Locked</>
+                : locking
+                  ? <><Loader2 size={16} className="animate-spin" /> Locking…</>
+                  : <><Lock size={15} /> Lock My Selections</>}
             </button>
           </div>
         </div>
@@ -856,62 +917,6 @@ export function SessionPage() {
           </div>
         </div>
       )}
-
-      <Modal
-        open={showChooseItemsIntro}
-        onClose={dismissChooseItemsIntro}
-        title="Bill uploaded"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-xl border border-success/20 bg-success/[0.07] px-4 py-3">
-            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
-              <CheckCircle size={14} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-fg">Bill uploaded. Now choose your items.</p>
-              <p className="mt-1 text-xs leading-relaxed text-fg-subtle">
-                Select only what you consumed. For shared items, use Portion to enter your percentage or amount. Bill quantity and amount are locked on this screen.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={dismissChooseItemsIntro}
-            className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-all hover:bg-primary-hover active:scale-98"
-          >
-            Choose items
-          </button>
-        </div>
-      </Modal>
-
-      <Modal
-        open={showLockDoneModal}
-        onClose={closeLockDoneModal}
-        title="Items locked"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-xl border border-success/20 bg-success/[0.07] px-4 py-3">
-            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
-              <CheckCircle size={14} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-fg">Your items are locked now.</p>
-              <p className="mt-1 text-xs leading-relaxed text-fg-subtle">
-                You will be taken back to your outstanding bills.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={closeLockDoneModal}
-            className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-all hover:bg-primary-hover active:scale-98"
-          >
-            Back to my bills
-          </button>
-        </div>
-      </Modal>
 
       <Modal
         open={showBillEditor}
@@ -1030,7 +1035,7 @@ export function SessionPage() {
               type="button"
               onClick={handleSaveBillEditor}
               disabled={billEditorSaving}
-              className="flex-[2] rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-all hover:bg-primary-hover disabled:bg-surface-overlay disabled:text-fg-faint"
+              className="min-h-11 flex-[2] rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-colors duration-150 hover:bg-primary-hover disabled:bg-surface-overlay disabled:text-fg-faint"
             >
               {billEditorSaving ? (
                 <span className="inline-flex items-center gap-2">

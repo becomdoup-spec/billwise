@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react'
 
 type ToastType = 'success' | 'error' | 'info'
@@ -21,7 +21,6 @@ export const useToastStore = create<ToastStore>((set) => ({
   add: (message, type = 'info') => {
     const id = crypto.randomUUID()
     set((s) => ({ toasts: [...s.toasts, { id, message, type }] }))
-    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 3500)
   },
   remove: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }))
@@ -44,20 +43,33 @@ const accents = {
   info: 'border-primary/30',
 }
 
-function ToastItem({ toast: t, onRemove }: { toast: Toast; onRemove: () => void }) {
+function ToastItem({ toast: t }: { toast: Toast }) {
+  const remove = useToastStore((state) => state.remove)
+  const [leaving, setLeaving] = useState(false)
+  const leaveTimerRef = useRef<number>(0)
+
+  const beginRemove = useCallback(() => {
+    if (leaveTimerRef.current) return
+    setLeaving(true)
+    leaveTimerRef.current = window.setTimeout(() => remove(t.id), 160)
+  }, [remove, t.id])
+
   useEffect(() => {
-    const timer = setTimeout(onRemove, 3500)
-    return () => clearTimeout(timer)
-  }, [onRemove])
+    const timer = window.setTimeout(beginRemove, 3500)
+    return () => {
+      window.clearTimeout(timer)
+      window.clearTimeout(leaveTimerRef.current)
+    }
+  }, [beginRemove])
 
   return (
     <div
-      role="status"
-      className={`flex items-start gap-3 bg-surface-raised border ${accents[t.type]} rounded-2xl px-4 py-3 shadow-overlay animate-slide-up`}
+      role={t.type === 'error' ? 'alert' : 'status'}
+      className={`flex min-h-11 items-start gap-3 rounded-2xl border bg-surface-raised px-4 py-3 shadow-overlay animate-slide-up transition-[opacity,transform] duration-150 ${accents[t.type]} ${leaving ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100'}`}
     >
       {icons[t.type]}
       <span className="text-sm text-fg flex-1 leading-snug">{t.message}</span>
-      <button onClick={onRemove} aria-label="Dismiss" className="text-fg-faint hover:text-fg transition-colors mt-0.5">
+      <button onClick={beginRemove} aria-label="Dismiss notification" className="-mr-2 -mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-fg-faint transition-colors hover:bg-surface-overlay hover:text-fg">
         <X size={14} />
       </button>
     </div>
@@ -65,7 +77,7 @@ function ToastItem({ toast: t, onRemove }: { toast: Toast; onRemove: () => void 
 }
 
 export function ToastContainer() {
-  const { toasts, remove } = useToastStore()
+  const toasts = useToastStore((state) => state.toasts)
   return (
     <div
       className="fixed left-1/2 z-[100] flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4 pointer-events-none"
@@ -73,7 +85,7 @@ export function ToastContainer() {
     >
       {toasts.map((t) => (
         <div key={t.id} className="pointer-events-auto">
-          <ToastItem toast={t} onRemove={() => remove(t.id)} />
+          <ToastItem toast={t} />
         </div>
       ))}
     </div>

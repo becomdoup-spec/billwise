@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections } from '../lib/db'
 import {
   AlertCircle, ArrowLeft, Loader2, ReceiptText, UserRound,
-  Clock, CheckCircle, ChevronRight, X,
+  Clock, CheckCircle, ChevronRight,
 } from 'lucide-react'
 import { PinPad } from '../components/auth/PinPad'
 import { HoneycombGrid } from '../components/auth/HoneycombGrid'
 import { ThemeToggle } from '../components/shared/ThemeToggle'
+import { Modal } from '../components/shared/Modal'
 import { useAppStore } from '../store/appStore'
 import { hashPin, formatCurrency, computeSplits, isParticipantDone, isSessionComplete } from '../services/calculations'
 import clsx from 'clsx'
-import type { Session, User } from '../types'
+import type { BillItem, ItemSelection, Session, User } from '../types'
 
 type Step = 'profiles' | 'pin'
 type Role = 'admin' | 'user'
@@ -43,6 +44,22 @@ export function AuthPage() {
   const [billPickerSession, setBillPickerSession] = useState<Session | null>(null)
   // Split popup state for completed bills
   const [splitPopup, setSplitPopup] = useState<{ session: Session; userId: string } | null>(null)
+  const [splitPopupOpen, setSplitPopupOpen] = useState(false)
+  const splitPopupTimerRef = useRef<number>(0)
+
+  const openSplitPopup = (session: Session, userId: string) => {
+    window.clearTimeout(splitPopupTimerRef.current)
+    setSplitPopup({ session, userId })
+    setSplitPopupOpen(true)
+  }
+
+  const closeSplitPopup = () => {
+    setSplitPopupOpen(false)
+    window.clearTimeout(splitPopupTimerRef.current)
+    splitPopupTimerRef.current = window.setTimeout(() => setSplitPopup(null), 280)
+  }
+
+  useEffect(() => () => window.clearTimeout(splitPopupTimerRef.current), [])
 
   // Force-refresh all data every time the landing page is visible
   useEffect(() => {
@@ -140,7 +157,7 @@ export function AuthPage() {
         <ThemeToggle />
       </div>
 
-      <main className="flex min-h-0 w-full flex-1 items-start justify-center overflow-y-auto py-6 sm:items-center sm:py-10">
+      <main className="flex min-h-0 w-full flex-1 items-start justify-center overflow-y-auto py-6 sm:py-10">
         {step === 'profiles' ? (
           <div className="w-full max-w-4xl text-center animate-fade-in">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary mb-3">Shared moments. Fair splits.</p>
@@ -196,6 +213,8 @@ export function AuthPage() {
                             key={session.id}
                             session={session}
                             users={users}
+                            billItems={billItems[session.id] ?? []}
+                            sessionSelections={selections.filter((selection) => selection.sessionId === session.id)}
                             variant="outstanding"
                             onPickMember={(userId) => {
                               setBillPickerSession(null)
@@ -225,8 +244,10 @@ export function AuthPage() {
                             key={session.id}
                             session={session}
                             users={users}
+                            billItems={billItems[session.id] ?? []}
+                            sessionSelections={selections.filter((selection) => selection.sessionId === session.id)}
                             variant="completed"
-                            onPickMember={(userId) => setSplitPopup({ session, userId })}
+                            onPickMember={(userId) => openSplitPopup(session, userId)}
                             />
                           ))}
                         </div>
@@ -295,11 +316,12 @@ export function AuthPage() {
       {splitPopup && (
         <SplitPopupModal
           session={splitPopup.session}
+          open={splitPopupOpen}
           userId={splitPopup.userId}
           users={users}
           billItems={billItems[splitPopup.session.id] ?? []}
           selections={selections.filter((s) => s.sessionId === splitPopup.session.id)}
-          onClose={() => setSplitPopup(null)}
+          onClose={closeSplitPopup}
         />
       )}
     </div>
@@ -309,10 +331,12 @@ export function AuthPage() {
 // ── Landing bill card ──────────────────────────────────────────────
 
 function LandingBillCard({
-  session, users, onPickMember, variant = 'outstanding',
+  session, users, billItems, sessionSelections, onPickMember, variant = 'outstanding',
 }: {
   session: Session
   users: User[]
+  billItems: BillItem[]
+  sessionSelections: ItemSelection[]
   onPickMember: (userId: string) => void
   variant?: 'outstanding' | 'completed'
 }) {
@@ -324,6 +348,17 @@ function LandingBillCard({
   const visibleParticipants = pendingParticipants.length > 0 ? pendingParticipants : participants
 
   const isCompleted = variant === 'completed'
+  const completedSplits = isCompleted
+    ? computeSplits(
+      billItems,
+      sessionSelections,
+      participants,
+      session.cgst,
+      session.sgst,
+      session.lockedParticipantIds,
+      session.totalAmount,
+    )
+    : []
 
   // Time remaining badge for completed bills
   let timeLeft = ''
@@ -339,7 +374,8 @@ function LandingBillCard({
     <div className={`border rounded-xl overflow-hidden shadow-sm ${isCompleted ? 'bg-surface/60 border-line/60' : 'bg-surface border-line'}`}>
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex flex-col gap-2 px-3 py-2.5 text-left hover:bg-surface-raised/40 transition-colors"
+        aria-expanded={expanded}
+        className="flex min-h-11 w-full flex-col gap-2 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-surface-raised/40"
       >
         {/* Top row: icon + name */}
         <div className="flex items-center gap-2">
@@ -397,16 +433,17 @@ function LandingBillCard({
       </button>
 
       {expanded && (
-        <div className="border-t border-line/60 px-3 py-2.5 bg-canvas/40">
+        <div className="animate-reveal border-t border-line/60 bg-canvas/40 px-3 py-2.5">
           {isCompleted ? (
             <>
               <p className="text-[9px] text-fg-faint uppercase tracking-wider mb-2">Tap your name to view your split</p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="grid grid-cols-1 gap-1.5">
                 {participants.map((p, i) => (
                   <button
                     key={p.id}
                     onClick={() => onPickMember(p.id)}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-success/30 bg-success/10 hover:bg-success/20 transition-all active:scale-95"
+                    className="group/member flex min-h-11 w-full items-center gap-2 rounded-lg border border-success/25 bg-success/[0.07] px-2.5 py-2 transition-[border-color,background-color,transform] duration-150 hover:border-success/40 hover:bg-success/15 active:scale-[0.99]"
+                    title={`${p.name}: ${formatCurrency(completedSplits.find((split) => split.userId === p.id)?.grandTotal ?? 0)}`}
                   >
                     <div className={clsx(
                       'w-4 h-4 rounded-full bg-gradient-to-br flex items-center justify-center text-[8px] font-bold text-white shrink-0',
@@ -414,7 +451,12 @@ function LandingBillCard({
                     )}>
                       {p.name[0]?.toUpperCase()}
                     </div>
-                    <span className="text-success text-[10px] font-medium">{p.name.split(' ')[0]}</span>
+                    <span className="min-w-0 flex-1 truncate text-left text-[10px] font-medium text-fg">
+                      {p.name.split(' ')[0]}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold text-success transition-transform group-hover/member:translate-x-[-2px]">
+                      {formatCurrency(completedSplits.find((split) => split.userId === p.id)?.grandTotal ?? 0)}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -427,7 +469,7 @@ function LandingBillCard({
                   <button
                     key={p.id}
                     onClick={() => onPickMember(p.id)}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-line bg-surface-raised hover:border-primary/40 transition-all active:scale-95"
+                    className="flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-surface-raised px-3 py-2 transition-[border-color,background-color,transform] duration-150 hover:border-primary/40 active:scale-95"
                   >
                     <div className={clsx(
                       'w-4 h-4 rounded-full bg-gradient-to-br flex items-center justify-center text-[8px] font-bold text-white shrink-0',
@@ -450,9 +492,10 @@ function LandingBillCard({
 // ── Split popup modal (completed bills) ───────────────────────────
 
 function SplitPopupModal({
-  session, userId, users, billItems, selections, onClose,
+  session, userId, users, billItems, selections, open, onClose,
 }: {
   session: Session
+  open: boolean
   userId: string
   users: User[]
   billItems: import('../types').BillItem[]
@@ -475,30 +518,21 @@ function SplitPopupModal({
   const mySplit = splits.find((s) => s.userId === userId)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm bg-surface rounded-3xl border border-line shadow-2xl overflow-hidden animate-scale-in">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-line">
-          <div className="flex items-center gap-3">
-            <div className={clsx(
-              'w-9 h-9 rounded-xl bg-gradient-to-br flex items-center justify-center text-sm font-bold text-white shrink-0',
-              avatarStyles[userIdx >= 0 ? userIdx % avatarStyles.length : 0],
-            )}>
-              {user?.name[0]?.toUpperCase()}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-fg">{user?.name}</p>
-              <p className="text-xs text-fg-subtle truncate max-w-[160px]">{session.restaurantName}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-fg-faint hover:text-fg-muted p-1 transition-colors">
-            <X size={18} />
-          </button>
+    <Modal open={open} onClose={onClose} title={`${user?.name ?? 'Member'}'s split`} size="sm">
+      <div className="mb-4 flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5">
+        <div className={clsx(
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-sm font-bold text-white',
+          avatarStyles[userIdx >= 0 ? userIdx % avatarStyles.length : 0],
+        )}>
+          {user?.name[0]?.toUpperCase()}
         </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-fg">{user?.name}</p>
+          <p className="truncate text-xs text-fg-subtle">{session.restaurantName}</p>
+        </div>
+      </div>
 
-        {/* Item breakdown */}
-        <div className="px-5 py-3 max-h-[40vh] overflow-y-auto space-y-1.5">
+      <div className="max-h-[40vh] space-y-1.5 overflow-y-auto">
           {mySplit && mySplit.itemBreakdown.length > 0 ? (
             mySplit.itemBreakdown.map(({ item, portionPercentage, amount }) => (
               <div key={item.id} className="flex items-center justify-between gap-2">
@@ -514,11 +548,10 @@ function SplitPopupModal({
           ) : (
             <p className="text-xs text-fg-faint text-center py-4">No items selected</p>
           )}
-        </div>
+      </div>
 
-        {/* Totals */}
-        {mySplit && (
-          <div className="px-5 py-3 border-t border-line space-y-1.5 bg-surface-raised/40">
+      {mySplit && (
+          <div className="mt-4 space-y-1.5 rounded-xl border border-line bg-surface px-3 py-3">
             <div className="flex justify-between text-xs text-fg-subtle">
               <span>Items</span>
               <span>{formatCurrency(mySplit.itemsTotal)}</span>
@@ -534,9 +567,8 @@ function SplitPopupModal({
               <span className="text-success">{formatCurrency(mySplit.grandTotal)}</span>
             </div>
           </div>
-        )}
-      </div>
-    </div>
+      )}
+    </Modal>
   )
 }
 
@@ -555,20 +587,14 @@ function BillMemberPickerModal({
   const choices = pending.length > 0 ? pending : participants
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-3xl border border-line bg-surface p-6 shadow-2xl animate-scale-in">
-        <button onClick={onClose} className="absolute top-4 right-4 text-fg-faint hover:text-fg-muted p-1">
-          <X size={18} />
-        </button>
-        <p className="text-sm font-semibold text-fg mb-1">{session.restaurantName || 'Unnamed Bill'}</p>
-        <p className="text-xs text-fg-subtle mb-4">Who are you?</p>
+    <Modal open onClose={onClose} title={session.restaurantName || 'Unnamed Bill'} size="sm">
+        <p className="mb-4 text-xs text-fg-subtle">Who are you?</p>
         <div className="space-y-2">
           {choices.map((p, i) => (
             <button
               key={p.id}
               onClick={() => onSelect(p.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-line hover:border-primary/40 hover:bg-surface-raised/50 transition-all group"
+              className="group flex min-h-11 w-full items-center gap-3 rounded-xl border border-line px-4 py-3 transition-[border-color,background-color,transform] duration-150 hover:border-primary/40 hover:bg-surface-raised/50 active:scale-[0.99]"
             >
               <div className={clsx(
                 'w-9 h-9 rounded-xl bg-gradient-to-br flex items-center justify-center text-base font-bold text-white shrink-0',
@@ -581,7 +607,6 @@ function BillMemberPickerModal({
             </button>
           ))}
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

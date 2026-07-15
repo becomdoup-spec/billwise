@@ -35,6 +35,7 @@ export function UserDashboard() {
     deleteSession,
   } = useAppStore()
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const splitDataReady = cloudReady && selectionsReady && !cloudSyncError
 
   const mySessions = sessions.filter(
@@ -52,6 +53,9 @@ export function UserDashboard() {
   })
 
   const isEmpty = outstanding.length === 0 && completed.length === 0
+  const billsNeedingMyAction = outstanding.filter((session) => (
+    !isParticipantDone(session, currentUser?.id ?? '')
+  )).length
 
   return (
     <Layout>
@@ -62,7 +66,7 @@ export function UserDashboard() {
         rightAction={
           <button
             onClick={() => navigate('/user/new-session')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover rounded-xl text-xs font-semibold text-primary-fg transition-all active:scale-95"
+            className="flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-fg transition-[background-color,transform] duration-150 hover:bg-primary-hover active:scale-95"
           >
             <Plus size={13} />
             New Bill
@@ -87,7 +91,11 @@ export function UserDashboard() {
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-2 h-2 rounded-full bg-warning animate-pulse" />
                   <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">Outstanding</p>
-                  <span className="text-[10px] text-fg-faint ml-auto">Waiting for all members to lock in</span>
+                  <span className="ml-auto text-right text-[10px] text-fg-faint">
+                    {billsNeedingMyAction > 0
+                      ? `You have ${billsNeedingMyAction} bill${billsNeedingMyAction === 1 ? '' : 's'} to finish`
+                      : 'Waiting for other members'}
+                  </span>
                 </div>
                 <div className="space-y-3">
                   {outstanding.map((session) => (
@@ -159,24 +167,29 @@ export function UserDashboard() {
         <div className="flex gap-2 mt-5">
           <button
             onClick={() => setSessionToDelete(null)}
-            className="flex-1 py-2.5 rounded-xl border border-line text-sm text-fg-muted hover:bg-surface-overlay transition-colors"
+            disabled={deleting}
+            className="min-h-11 flex-1 rounded-xl border border-line py-2.5 text-sm text-fg-muted transition-colors hover:bg-surface-overlay disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={async () => {
               if (!sessionToDelete) return
+              setDeleting(true)
               try {
                 await deleteSession(sessionToDelete.id)
                 toast.info('Bill deleted')
                 setSessionToDelete(null)
               } catch {
                 toast.error('Could not delete the bill')
+              } finally {
+                setDeleting(false)
               }
             }}
-            className="flex-1 py-2.5 rounded-xl bg-danger/15 border border-danger/30 text-sm font-medium text-danger hover:bg-danger/25 transition-colors"
+            disabled={deleting}
+            className="min-h-11 flex-1 rounded-xl border border-danger/30 bg-danger/15 py-2.5 text-sm font-medium text-danger transition-colors hover:bg-danger/25 disabled:opacity-60"
           >
-            Delete bill
+            {deleting ? 'Deleting…' : 'Delete bill'}
           </button>
         </div>
       </Modal>
@@ -231,15 +244,15 @@ function BillCard({
   }
 
   return (
-    <button
-      onClick={onClick}
+    <article
       className={clsx(
-        'card-lift w-full border rounded-2xl p-4 text-left shadow-sm hover:shadow-card group transition-all',
+        'card-lift group w-full overflow-hidden rounded-2xl border text-left shadow-sm hover:shadow-card',
         variant === 'outstanding'
           ? 'bg-surface border-line hover:border-warning/40'
           : 'bg-surface/60 border-line/60 hover:border-success/40',
       )}
     >
+      <button type="button" onClick={onClick} className="w-full p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60">
       {/* Header row */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-start gap-2.5 min-w-0">
@@ -291,7 +304,7 @@ function BillCard({
             <div
               key={p.id}
               className={clsx(
-                'flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-medium transition-all',
+                'flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-medium transition-[color,background-color,border-color] duration-150',
                 done
                   ? 'bg-success/10 border-success/25 text-success'
                   : 'bg-warning/10 border-warning/25 text-warning',
@@ -312,16 +325,7 @@ function BillCard({
 
       {/* Status line */}
       <div className="flex items-center justify-between gap-2">
-        {onDelete && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete() }}
-            className="flex items-center gap-1 text-[10px] text-fg-faint hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/25 px-2 py-0.5 rounded-full transition-all shrink-0"
-            title="Delete this bill"
-          >
-            <Trash2 size={9} /> Delete
-          </button>
-        )}
-        <div className="flex items-center gap-1.5 flex-1 justify-end">
+        <div className="flex flex-1 items-center gap-1.5">
           {variant === 'completed' ? (
             <span className="flex items-center gap-1 text-xs text-success">
               <CheckCircle size={10} /> All locked · final split ready
@@ -346,6 +350,20 @@ function BillCard({
           </span>
         )}
       </div>
-    </button>
+      </button>
+      {onDelete && (
+        <div className="flex min-h-11 items-center justify-between border-t border-line/60 bg-canvas/30 px-4 py-1.5">
+          <span className="text-[10px] text-fg-faint">Created by you</span>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs text-fg-faint transition-[color,background-color] duration-150 hover:bg-danger/10 hover:text-danger"
+            title="Delete this bill"
+          >
+            <Trash2 size={13} /> Delete
+          </button>
+        </div>
+      )}
+    </article>
   )
 }

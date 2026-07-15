@@ -13,23 +13,71 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
   const { theme, setTheme } = useThemeStore()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const menuId = 'theme-menu'
+  const themes = GROUPS.flatMap((group) => group.themes)
+
+  const closeMenu = (restoreFocus = false) => {
+    setOpen(false)
+    if (restoreFocus) window.requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+
+  const openMenu = (index = themes.indexOf(theme)) => {
+    setOpen(true)
+    window.requestAnimationFrame(() => itemRefs.current[Math.max(index, 0)]?.focus())
+  }
 
   useEffect(() => {
     if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    const handler = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) closeMenu()
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('pointerdown', handler)
+    return () => document.removeEventListener('pointerdown', handler)
   }, [open])
+
+  const handleItemKeyDown = (event: React.KeyboardEvent, index: number) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeMenu(true)
+      return
+    }
+
+    const direction = event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      ? 1
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0
+    if (direction) {
+      event.preventDefault()
+      itemRefs.current[(index + direction + themes.length) % themes.length]?.focus()
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      itemRefs.current[0]?.focus()
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      itemRefs.current[themes.length - 1]?.focus()
+    } else if (event.key === 'Tab') {
+      closeMenu()
+    }
+  }
 
   return (
     <div ref={ref} className={clsx('relative', className)}>
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={triggerRef}
+        type="button"
+        onClick={() => open ? closeMenu() : openMenu()}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown') { event.preventDefault(); openMenu() }
+          if (event.key === 'ArrowUp') { event.preventDefault(); openMenu(themes.length - 1) }
+          if (event.key === 'Escape' && open) { event.preventDefault(); closeMenu(true) }
+        }}
         aria-label="Choose theme"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
         title="Choose theme"
-        className="relative p-2 rounded-xl text-fg-subtle hover:text-fg hover:bg-surface-overlay transition-all duration-200 active:scale-90"
+        className="relative flex h-11 w-11 items-center justify-center rounded-xl text-fg-subtle transition-[color,background-color,transform] duration-150 hover:bg-surface-overlay hover:text-fg active:scale-95"
       >
         {/* Current theme swatch dot */}
         <span
@@ -40,23 +88,29 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 z-50 w-64 rounded-2xl border border-line bg-surface-raised shadow-overlay animate-pop overflow-hidden">
+        <div id={menuId} role="menu" aria-label="Choose theme" className="absolute right-0 top-full z-50 mt-2 w-72 origin-top-right overflow-hidden rounded-2xl border border-line bg-surface-raised shadow-overlay animate-menu-in">
           <div className="px-3 pt-3 pb-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-fg-faint">Theme</p>
           </div>
           {GROUPS.map((group) => (
             <div key={group.label} className="px-2 pb-2">
               <p className="text-[10px] font-medium text-fg-faint px-1 pt-1.5 pb-1 uppercase tracking-wider">{group.label}</p>
-              <div className="grid grid-cols-3 gap-1">
+              <div role="group" aria-label={`${group.label} themes`} className="grid grid-cols-3 gap-1">
                 {group.themes.map((t) => {
                   const meta = THEME_META[t]
                   const active = theme === t
+                  const index = themes.indexOf(t)
                   return (
                     <button
                       key={t}
-                      onClick={() => { setTheme(t); setOpen(false) }}
+                      ref={(element) => { itemRefs.current[index] = element }}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={active}
+                      onClick={() => { setTheme(t); closeMenu(true) }}
+                      onKeyDown={(event) => handleItemKeyDown(event, index)}
                       className={clsx(
-                        'flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-left transition-all',
+                        'flex min-h-11 items-center gap-1.5 rounded-xl px-2 py-2 text-left transition-[background-color,box-shadow] duration-150',
                         active
                           ? 'bg-surface-overlay ring-1 ring-primary/40'
                           : 'hover:bg-surface-overlay',
