@@ -45,7 +45,7 @@ export function SessionPage() {
   const [showBillEditor, setShowBillEditor] = useState(false)
   const [billEditorDrafts, setBillEditorDrafts] = useState<Record<string, BillEditorDraft>>({})
   const [billEditorSaving, setBillEditorSaving] = useState(false)
-  const [pendingItemIds, setPendingItemIds] = useState<string[]>([])
+  const [pendingItemOperations, setPendingItemOperations] = useState<Record<string, number>>({})
   const [pendingParticipantIds, setPendingParticipantIds] = useState<string[]>([])
   const [locking, setLocking] = useState(false)
   const [lockSuccess, setLockSuccess] = useState(false)
@@ -113,6 +113,8 @@ export function SessionPage() {
   const hasCoverageIssues = selectableItems.some((item) =>
     !isPortionFullyAllocated(coverage[item.id] ?? 0),
   )
+  const pendingSelectionCount = Object.values(pendingItemOperations).reduce((sum, count) => sum + count, 0)
+  const hasPendingSelections = pendingSelectionCount > 0
   const nonParticipants = users.filter((u) => u.role === 'user' && !session.participantIds.includes(u.id))
 
   // Keep participant status aligned with the same completion semantics as the store.
@@ -254,43 +256,70 @@ export function SessionPage() {
   }
 
   const handleSelect = async (itemId: string) => {
-    if (!selectionUserId || (!isAdmin && isSessionLocked) || pendingItemIds.includes(itemId)) return
-    setPendingItemIds((ids) => [...ids, itemId])
+    if (!selectionUserId || (!isAdmin && isSessionLocked)) return
+    setPendingItemOperations((pending) => ({
+      ...pending,
+      [itemId]: (pending[itemId] ?? 0) + 1,
+    }))
     try {
       await setSelection(session.id, selectionUserId, itemId, 100)
     } catch {
       toast.error('Selection could not be saved')
     } finally {
-      setPendingItemIds((ids) => ids.filter((id) => id !== itemId))
+      setPendingItemOperations((pending) => {
+        const next = { ...pending }
+        const remaining = (next[itemId] ?? 1) - 1
+        if (remaining > 0) next[itemId] = remaining
+        else delete next[itemId]
+        return next
+      })
     }
   }
 
   const handleDeselect = async (itemId: string) => {
-    if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked)) || pendingItemIds.includes(itemId)) return
-    setPendingItemIds((ids) => [...ids, itemId])
+    if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked))) return
+    setPendingItemOperations((pending) => ({
+      ...pending,
+      [itemId]: (pending[itemId] ?? 0) + 1,
+    }))
     try {
       await removeSelection(session.id, selectionUserId, itemId)
     } catch {
       toast.error('Selection could not be removed')
     } finally {
-      setPendingItemIds((ids) => ids.filter((id) => id !== itemId))
+      setPendingItemOperations((pending) => {
+        const next = { ...pending }
+        const remaining = (next[itemId] ?? 1) - 1
+        if (remaining > 0) next[itemId] = remaining
+        else delete next[itemId]
+        return next
+      })
     }
   }
 
   const handlePortion = async (itemId: string, portion: number) => {
-    if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked)) || pendingItemIds.includes(itemId)) return
-    setPendingItemIds((ids) => [...ids, itemId])
+    if (!selectionUserId || (!isAdmin && (isSessionLocked || myLocked))) return
+    setPendingItemOperations((pending) => ({
+      ...pending,
+      [itemId]: (pending[itemId] ?? 0) + 1,
+    }))
     try {
       await setSelection(session.id, selectionUserId, itemId, portion)
     } catch {
       toast.error('Portion could not be saved')
     } finally {
-      setPendingItemIds((ids) => ids.filter((id) => id !== itemId))
+      setPendingItemOperations((pending) => {
+        const next = { ...pending }
+        const remaining = (next[itemId] ?? 1) - 1
+        if (remaining > 0) next[itemId] = remaining
+        else delete next[itemId]
+        return next
+      })
     }
   }
 
   const handleLockMine = async () => {
-    if (locking) return
+    if (locking || hasPendingSelections) return
     setLocking(true)
     try {
       await lockUserSelections(session.id, viewingUserId)
@@ -555,7 +584,7 @@ export function SessionPage() {
                     canEditBill={false}
                     canEditSelection={!isAdmin || Boolean(editingUser)}
                     showSelectionControl={!isAdmin || Boolean(editingUser)}
-                    isPending={pendingItemIds.includes(item.id)}
+                    isPending={(pendingItemOperations[item.id] ?? 0) > 0}
                     onSelect={handleSelect}
                     onDeselect={handleDeselect}
                     onPortionChange={handlePortion}
@@ -884,11 +913,15 @@ export function SessionPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-fg-subtle">
               <span>{mySelections.length} item{mySelections.length !== 1 ? 's' : ''} selected</span>
-              <span>{lockSuccess ? 'Saved successfully' : 'Review before locking'}</span>
+              <span>
+                {lockSuccess
+                  ? 'Saved successfully'
+                  : hasPendingSelections ? 'Saving your latest choices…' : 'Review before locking'}
+              </span>
             </div>
             <button
               onClick={handleLockMine}
-              disabled={locking || lockSuccess}
+              disabled={locking || lockSuccess || hasPendingSelections}
               className={clsx(
                 'flex min-h-11 w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-[background-color,box-shadow,transform] duration-150 active:scale-[0.98] disabled:shadow-none',
                 lockSuccess
@@ -898,6 +931,8 @@ export function SessionPage() {
             >
               {lockSuccess
                 ? <><CheckCircle size={16} /> Locked</>
+                : hasPendingSelections
+                  ? <><Loader2 size={16} className="animate-spin" /> Saving selections…</>
                 : locking
                   ? <><Loader2 size={16} className="animate-spin" /> Locking…</>
                   : <><Lock size={15} /> Lock My Selections</>}

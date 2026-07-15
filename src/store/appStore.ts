@@ -12,12 +12,30 @@ import { applyAdminDefaultTheme } from './themeStore'
 import type { Theme } from './themeStore'
 import { supabase } from '../lib/supabase'
 
+interface PendingSelectionMutation {
+  sessionId: string
+  userId: string
+  itemId: string
+  desiredSelection: ItemSelection | null
+  version: number
+  committed: boolean
+}
+
+interface PendingParticipantLock {
+  sessionId: string
+  userId: string
+  locked: boolean
+}
+
 interface AppStore {
   // Data
   users: User[]
   sessions: Session[]
+  pendingSessionIds: string[]
   billItems: Record<string, BillItem[]>
   selections: ItemSelection[]
+  pendingSelectionMutations: Record<string, PendingSelectionMutation>
+  pendingParticipantLocks: Record<string, PendingParticipantLock>
   apiKey: string
   cloudReady: boolean
   cloudSyncError: string
@@ -90,11 +108,83 @@ function requireCloudConnection() {
   }
 }
 
+const selectionMutationQueues = new Map<string, Promise<void>>()
+
+function selectionKey(sessionId: string, userId: string, itemId: string) {
+  return `${sessionId}:${userId}:${itemId}`
+}
+
+function keyForSelection(selection: ItemSelection) {
+  return selectionKey(selection.sessionId, selection.userId, selection.itemId)
+}
+
+function participantLockKey(sessionId: string, userId: string) {
+  return `${sessionId}:${userId}`
+}
+
+function replaceSelection(
+  selections: ItemSelection[],
+  key: string,
+  replacement: ItemSelection | null,
+) {
+  const withoutCurrent = selections.filter((selection) => keyForSelection(selection) !== key)
+  return replacement ? [...withoutCurrent, replacement] : withoutCurrent
+}
+
+function selectionMatchesIntent(remote: ItemSelection | undefined, desired: ItemSelection | null) {
+  if (!desired) return !remote
+  if (!remote) return false
+  return remote.portionPercentage === desired.portionPercentage
+    && Boolean(remote.lockedAt) === Boolean(desired.lockedAt)
+}
+
+function reconcileSelectionSnapshot(
+  remoteSelections: ItemSelection[],
+  pendingMutations: Record<string, PendingSelectionMutation>,
+  sessionId?: string,
+) {
+  const selectionsByKey = new Map(remoteSelections.map((selection) => [keyForSelection(selection), selection]))
+  const nextPendingMutations = { ...pendingMutations }
+
+  for (const [key, mutation] of Object.entries(pendingMutations)) {
+    if (sessionId && mutation.sessionId !== sessionId) continue
+    const remoteSelection = selectionsByKey.get(key)
+    const confirmed = mutation.committed
+      && selectionMatchesIntent(remoteSelection, mutation.desiredSelection)
+
+    if (confirmed) {
+      delete nextPendingMutations[key]
+    } else if (mutation.desiredSelection) {
+      selectionsByKey.set(key, mutation.desiredSelection)
+    } else {
+      selectionsByKey.delete(key)
+    }
+  }
+
+  return {
+    selections: [...selectionsByKey.values()],
+    pendingSelectionMutations: nextPendingMutations,
+  }
+}
+
+function enqueueSelectionMutation(key: string, operation: () => Promise<void>) {
+  const previous = selectionMutationQueues.get(key) ?? Promise.resolve()
+  const run = previous.catch(() => undefined).then(operation)
+  const tracked = run.finally(() => {
+    if (selectionMutationQueues.get(key) === tracked) selectionMutationQueues.delete(key)
+  })
+  selectionMutationQueues.set(key, tracked)
+  return tracked
+}
+
 export const useAppStore = create<AppStore>((set, get) => ({
       users: [],
       sessions: [],
+      pendingSessionIds: [],
       billItems: {},
       selections: [],
+      pendingSelectionMutations: {},
+      pendingParticipantLocks: {},
       apiKey: '',
       cloudReady: !supabase,
       cloudSyncError: supabase ? '' : 'Supabase is not configured for this deployment',
@@ -212,9 +302,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
           lockedParticipantIds: [],
           createdAt: new Date().toISOString(),
         }
-        await dbCreateSession(session)
-        set((s) => ({ sessions: [...s.sessions.filter((item) => item.id !== session.id), session] }))
-        return session
+
+        // Show the session immediately while Supabase and the remaining setup
+        // steps are running. Realtime hydration preserves pending sessions below.
+        set((s) => ({
+          sessions: [session, ...s.sessions.filter((item) => item.id !== session.id)],
+          pendingSessionIds: [...s.pendingSessionIds.filter((id) => id !== session.id), session.id],
+        }))
+
+        try {
+          await dbCreateSession(session)
+          return session
+        } catch (error) {
+          set((s) => ({
+            sessions: s.sessions.filter((item) => item.id !== session.id),
+            pendingSessionIds: s.pendingSessionIds.filter((id) => id !== session.id),
+          }))
+          throw error
+        }
       },
 
       updateSession: async (id, data) => {
@@ -230,11 +335,22 @@ export const useAppStore = create<AppStore>((set, get) => ({
         await dbDeleteSession(id)
         set((s) => {
           const billItems = { ...s.billItems }
+          const pendingSelectionMutations = Object.fromEntries(
+            Object.entries(s.pendingSelectionMutations)
+              .filter(([, mutation]) => mutation.sessionId !== id),
+          )
+          const pendingParticipantLocks = Object.fromEntries(
+            Object.entries(s.pendingParticipantLocks)
+              .filter(([, pendingLock]) => pendingLock.sessionId !== id),
+          )
           delete billItems[id]
           return {
             sessions: s.sessions.filter((sess) => sess.id !== id),
+            pendingSessionIds: s.pendingSessionIds.filter((sessionId) => sessionId !== id),
             billItems,
             selections: s.selections.filter((sel) => sel.sessionId !== id),
+            pendingSelectionMutations,
+            pendingParticipantLocks,
           }
         })
       },
@@ -345,7 +461,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
       setSelection: async (sessionId, userId, itemId, portion) => {
         requireCloudConnection()
         const state = get()
-        const previousSelections = state.selections
+        const key = selectionKey(sessionId, userId, itemId)
+        const version = (state.pendingSelectionMutations[key]?.version ?? 0) + 1
         const participantLocked = state.sessions.some((session) =>
           session.id === sessionId && (session.lockedParticipantIds ?? []).includes(userId),
         )
@@ -368,108 +485,206 @@ export const useAppStore = create<AppStore>((set, get) => ({
               portionPercentage: portion,
               lockedAt: participantLocked ? new Date().toISOString() : undefined,
             }
-        set({
-          selections: existing
-            ? previousSelections.map((selection) => selection.id === existing.id ? sel : selection)
-            : [...previousSelections, sel],
-        })
+        set((current) => ({
+          selections: replaceSelection(current.selections, key, sel),
+          pendingSelectionMutations: {
+            ...current.pendingSelectionMutations,
+            [key]: {
+              sessionId,
+              userId,
+              itemId,
+              desiredSelection: sel,
+              version,
+              committed: false,
+            },
+          },
+        }))
         try {
-          await dbUpsertSelection(sel)
+          await enqueueSelectionMutation(key, () => dbUpsertSelection(sel))
+          set((current) => {
+            const mutation = current.pendingSelectionMutations[key]
+            if (!mutation || mutation.version !== version) return current
+            return {
+              pendingSelectionMutations: {
+                ...current.pendingSelectionMutations,
+                [key]: { ...mutation, committed: true },
+              },
+            }
+          })
         } catch (error) {
-          set({ selections: previousSelections })
+          const currentMutation = get().pendingSelectionMutations[key]
+          if (!currentMutation || currentMutation.version !== version) return
+          set((current) => {
+            const pendingSelectionMutations = { ...current.pendingSelectionMutations }
+            delete pendingSelectionMutations[key]
+            return {
+              selections: replaceSelection(current.selections, key, existing ?? null),
+              pendingSelectionMutations,
+            }
+          })
           throw error
         }
       },
 
       removeSelection: async (sessionId, userId, itemId) => {
         requireCloudConnection()
-        const previousSelections = get().selections
-        set({
-          selections: previousSelections.filter(
-            (sel) => !(sel.sessionId === sessionId && sel.userId === userId && sel.itemId === itemId),
-          ),
-        })
+        const state = get()
+        const key = selectionKey(sessionId, userId, itemId)
+        const version = (state.pendingSelectionMutations[key]?.version ?? 0) + 1
+        const existing = state.selections.find((selection) => keyForSelection(selection) === key) ?? null
+        set((current) => ({
+          selections: replaceSelection(current.selections, key, null),
+          pendingSelectionMutations: {
+            ...current.pendingSelectionMutations,
+            [key]: {
+              sessionId,
+              userId,
+              itemId,
+              desiredSelection: null,
+              version,
+              committed: false,
+            },
+          },
+        }))
         try {
-          await dbDeleteSelection(sessionId, userId, itemId)
+          await enqueueSelectionMutation(key, () => dbDeleteSelection(sessionId, userId, itemId))
+          set((current) => {
+            const mutation = current.pendingSelectionMutations[key]
+            if (!mutation || mutation.version !== version) return current
+            return {
+              pendingSelectionMutations: {
+                ...current.pendingSelectionMutations,
+                [key]: { ...mutation, committed: true },
+              },
+            }
+          })
         } catch (error) {
-          set({ selections: previousSelections })
+          const currentMutation = get().pendingSelectionMutations[key]
+          if (!currentMutation || currentMutation.version !== version) return
+          set((current) => {
+            const pendingSelectionMutations = { ...current.pendingSelectionMutations }
+            delete pendingSelectionMutations[key]
+            return {
+              selections: replaceSelection(current.selections, key, existing),
+              pendingSelectionMutations,
+            }
+          })
           throw error
         }
       },
 
-	      lockUserSelections: async (sessionId, userId) => {
-	        requireCloudConnection()
-	        const now = new Date().toISOString()
-	        await dbLockUserSelections(sessionId, userId, now)
-	        set((s) => {
-	          let sessionPatch: Partial<Session> | null = null
-	          const nextSelections = s.selections.map((sel) =>
-	            sel.sessionId === sessionId && sel.userId === userId
-	              ? { ...sel, lockedAt: now }
-	              : sel,
-	          )
-	          const sessionItems = s.billItems[sessionId] ?? []
-	          const sessionSels = nextSelections.filter((sel) => sel.sessionId === sessionId)
+      lockUserSelections: async (sessionId, userId) => {
+        requireCloudConnection()
+        const now = new Date().toISOString()
+        await dbLockUserSelections(sessionId, userId, now)
+        set((s) => {
+          let sessionPatch: Partial<Session> | null = null
+          const nextSelections = s.selections.map((selection) =>
+            selection.sessionId === sessionId && selection.userId === userId
+              ? { ...selection, lockedAt: now }
+              : selection,
+          )
+          const pendingSelectionMutations = { ...s.pendingSelectionMutations }
+          nextSelections
+            .filter((selection) => selection.sessionId === sessionId && selection.userId === userId)
+            .forEach((selection) => {
+              const key = keyForSelection(selection)
+              pendingSelectionMutations[key] = {
+                sessionId,
+                userId,
+                itemId: selection.itemId,
+                desiredSelection: selection,
+                version: (pendingSelectionMutations[key]?.version ?? 0) + 1,
+                committed: true,
+              }
+            })
+          const sessionItems = s.billItems[sessionId] ?? []
+          const sessionSelections = nextSelections.filter((selection) => selection.sessionId === sessionId)
 
-	          const updatedSessions = s.sessions.map((sess) => {
-	            if (sess.id !== sessionId) return sess
-	            const newLocked = [...new Set([...(sess.lockedParticipantIds ?? []), userId])]
-	            const candidate = {
-	              ...sess,
-	              lockedParticipantIds: newLocked,
-	            }
-	            const completion = getSessionCompletionState(candidate, sessionItems, sessionSels)
+          const updatedSessions = s.sessions.map((session) => {
+            if (session.id !== sessionId) return session
+            const lockedParticipantIds = [...new Set([...(session.lockedParticipantIds ?? []), userId])]
+            const candidate = { ...session, lockedParticipantIds }
+            const completion = getSessionCompletionState(candidate, sessionItems, sessionSelections)
 
-	            if (completion.complete) {
-	              const completedAt = sess.completedAt ?? now
-	              sessionPatch = { completedAt, status: 'completed' }
-	              return { ...candidate, completedAt, status: 'completed' as const }
-	            }
+            if (completion.complete) {
+              const completedAt = session.completedAt ?? now
+              sessionPatch = { completedAt, status: 'completed' }
+              return { ...candidate, completedAt, status: 'completed' as const }
+            }
 
-	            if (sess.status === 'completed' || sess.completedAt) {
-	              sessionPatch = { completedAt: null, status: 'active' }
-	              return { ...candidate, completedAt: null, status: 'active' as const }
-	            }
+            if (session.status === 'completed' || session.completedAt) {
+              sessionPatch = { completedAt: null, status: 'active' }
+              return { ...candidate, completedAt: null, status: 'active' as const }
+            }
 
-	            return candidate
-	          })
+            return candidate
+          })
 
-	          if (sessionPatch) {
-	            dbUpdateSession(sessionId, sessionPatch).catch(console.error)
-	          }
+          if (sessionPatch) {
+            dbUpdateSession(sessionId, sessionPatch).catch(console.error)
+          }
 
-	          return {
-	            sessions: updatedSessions,
-	            selections: nextSelections,
-	          }
-	        })
-	      },
+          return {
+            sessions: updatedSessions,
+            selections: nextSelections,
+            pendingSelectionMutations,
+            pendingParticipantLocks: {
+              ...s.pendingParticipantLocks,
+              [participantLockKey(sessionId, userId)]: { sessionId, userId, locked: true },
+            },
+          }
+        })
+      },
 
-	      unlockUserSelections: async (sessionId, userId) => {
-	        requireCloudConnection()
-	        await dbUnlockUserSelections(sessionId, userId)
-	        set((s) => ({
-	          sessions: s.sessions.map((sess) => {
-	            if (sess.id !== sessionId) return sess
-	            const newLocked = (sess.lockedParticipantIds ?? []).filter((id) => id !== userId)
-	            // If session was completed but a user is now unlocked, revert it to active so it
-	            // appears in the pending section again for all participants.
-	            const needsRevert = sess.status === 'completed' || Boolean(sess.completedAt)
-	            if (needsRevert) {
-	              dbUpdateSession(sessionId, { status: 'active', completedAt: null }).catch(console.error)
-	            }
-	            return {
-	              ...sess,
-	              lockedParticipantIds: newLocked,
-	              ...(needsRevert ? { status: 'active' as const, completedAt: null } : {}),
-	            }
-	          }),
-          selections: s.selections.map((sel) =>
-            sel.sessionId === sessionId && sel.userId === userId
-              ? { ...sel, lockedAt: undefined }
-              : sel,
-          ),
-        }))
+      unlockUserSelections: async (sessionId, userId) => {
+        requireCloudConnection()
+        await dbUnlockUserSelections(sessionId, userId)
+        set((s) => {
+          const nextSelections = s.selections.map((selection) =>
+            selection.sessionId === sessionId && selection.userId === userId
+              ? { ...selection, lockedAt: undefined }
+              : selection,
+          )
+          const pendingSelectionMutations = { ...s.pendingSelectionMutations }
+          nextSelections
+            .filter((selection) => selection.sessionId === sessionId && selection.userId === userId)
+            .forEach((selection) => {
+              const key = keyForSelection(selection)
+              pendingSelectionMutations[key] = {
+                sessionId,
+                userId,
+                itemId: selection.itemId,
+                desiredSelection: selection,
+                version: (pendingSelectionMutations[key]?.version ?? 0) + 1,
+                committed: true,
+              }
+            })
+
+          return {
+            sessions: s.sessions.map((session) => {
+              if (session.id !== sessionId) return session
+              const lockedParticipantIds = (session.lockedParticipantIds ?? []).filter((id) => id !== userId)
+              // If session was completed but a user is now unlocked, revert it to active so it
+              // appears in the pending section again for all participants.
+              const needsRevert = session.status === 'completed' || Boolean(session.completedAt)
+              if (needsRevert) {
+                dbUpdateSession(sessionId, { status: 'active', completedAt: null }).catch(console.error)
+              }
+              return {
+                ...session,
+                lockedParticipantIds,
+                ...(needsRevert ? { status: 'active' as const, completedAt: null } : {}),
+              }
+            }),
+            selections: nextSelections,
+            pendingSelectionMutations,
+            pendingParticipantLocks: {
+              ...s.pendingParticipantLocks,
+              [participantLockKey(sessionId, userId)]: { sessionId, userId, locked: false },
+            },
+          }
+        })
       },
 
       getSelections: (sessionId) => get().selections.filter((s) => s.sessionId === sessionId),
@@ -482,16 +697,59 @@ export const useAppStore = create<AppStore>((set, get) => ({
         set((s) => {
           // Supabase is the source of truth whenever it is configured.
           const mergedUsers = users
-          const mergedSessions = sessions
+          // A refresh can race with the multi-step session creation flow. Keep
+          // locally pending sessions (and their newer local fields) until a
+          // fresh server snapshot confirms that setup has completed.
+          const localSessions = new Map(s.sessions.map((session) => [session.id, session]))
+          const remoteSessions = new Map(sessions.map((session) => [session.id, session]))
+          const remoteSessionIds = new Set(sessions.map((session) => session.id))
+          const mergedSessions = [
+            ...sessions.map((session) => {
+              if (!s.pendingSessionIds.includes(session.id)) return session
+              return { ...session, ...localSessions.get(session.id) }
+            }),
+            ...s.sessions.filter((session) => (
+              s.pendingSessionIds.includes(session.id) && !remoteSessionIds.has(session.id)
+            )),
+          ]
+          const pendingParticipantLocks = { ...s.pendingParticipantLocks }
+          const sessionsWithPendingLocks = [...mergedSessions]
+          for (const [key, pendingLock] of Object.entries(s.pendingParticipantLocks)) {
+            const remoteSession = sessions.find((session) => session.id === pendingLock.sessionId)
+            const remotelyLocked = Boolean(remoteSession?.lockedParticipantIds.includes(pendingLock.userId))
+            if (remoteSession && remotelyLocked === pendingLock.locked) {
+              delete pendingParticipantLocks[key]
+              continue
+            }
+
+            const sessionIndex = sessionsWithPendingLocks.findIndex((session) => session.id === pendingLock.sessionId)
+            if (sessionIndex < 0) continue
+            const localSession = sessionsWithPendingLocks[sessionIndex]
+            sessionsWithPendingLocks[sessionIndex] = {
+              ...localSession,
+              lockedParticipantIds: pendingLock.locked
+                ? [...new Set([...localSession.lockedParticipantIds, pendingLock.userId])]
+                : localSession.lockedParticipantIds.filter((id) => id !== pendingLock.userId),
+            }
+          }
 
           // Re-validate currentUser against fresh users list
           const refreshedCurrentUser = s.currentUser
             ? mergedUsers.find((u) => u.id === s.currentUser!.id) ?? s.currentUser
             : null
 
+          // The session becomes public only after participants, bill items and
+          // the image have finished saving. Keep protecting it until a fresh
+          // server snapshot confirms that final update.
+          const pendingSessionIds = s.pendingSessionIds.filter((sessionId) => (
+            !remoteSessions.get(sessionId)?.isPublic
+          ))
+
           return {
             users: mergedUsers,
-            sessions: mergedSessions,
+            sessions: sessionsWithPendingLocks,
+            pendingSessionIds,
+            pendingParticipantLocks,
             currentUser: refreshedCurrentUser,
             cloudReady: true,
             cloudSyncError: '',
@@ -502,16 +760,27 @@ export const useAppStore = create<AppStore>((set, get) => ({
       setCloudSyncState: (ready, error = '') => set({ cloudReady: ready, cloudSyncError: error }),
 
       hydrateBillItemsFromSupabase: (items) => {
-        const billItems = items.reduce<Record<string, BillItem[]>>((grouped, item) => {
+        const remoteBillItems = items.reduce<Record<string, BillItem[]>>((grouped, item) => {
           if (!grouped[item.sessionId]) grouped[item.sessionId] = []
           grouped[item.sessionId].push(item)
           return grouped
         }, {})
-        set({ billItems })
+        set((s) => {
+          const billItems = { ...remoteBillItems }
+          for (const sessionId of s.pendingSessionIds) {
+            if ((s.billItems[sessionId]?.length ?? 0) > (billItems[sessionId]?.length ?? 0)) {
+              billItems[sessionId] = s.billItems[sessionId]
+            }
+          }
+          return { billItems }
+        })
       },
 
       hydrateSelectionsFromSupabase: (selections) => {
-        set({ selections, selectionsReady: true })
+        set((s) => ({
+          ...reconcileSelectionSnapshot(selections, s.pendingSelectionMutations),
+          selectionsReady: true,
+        }))
       },
 
       updateSessionFromRealtime: (sessionId, data) => {
@@ -523,12 +792,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
       },
 
       setSelectionsForSession: (sessionId, sels) => {
-        set((s) => ({
-          selections: [
-            ...s.selections.filter((x) => x.sessionId !== sessionId),
-            ...sels,
-          ],
-        }))
+        set((s) => {
+          const reconciled = reconcileSelectionSnapshot(sels, s.pendingSelectionMutations, sessionId)
+          return {
+            selections: [
+              ...s.selections.filter((selection) => selection.sessionId !== sessionId),
+              ...reconciled.selections,
+            ],
+            pendingSelectionMutations: reconciled.pendingSelectionMutations,
+          }
+        })
       },
 
       updateBillItemFromRealtime: (sessionId, itemId, data) => {
@@ -544,6 +817,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
       upsertSelectionFromRealtime: (sel) => {
         set((s) => {
+          const key = keyForSelection(sel)
+          const mutation = s.pendingSelectionMutations[key]
+          if (mutation) {
+            if (!mutation.desiredSelection) return s
+            return {
+              selections: replaceSelection(s.selections, key, mutation.desiredSelection),
+            }
+          }
           const existing = s.selections.find(
             (x) => x.sessionId === sel.sessionId && x.userId === sel.userId && x.itemId === sel.itemId,
           )
@@ -555,25 +836,36 @@ export const useAppStore = create<AppStore>((set, get) => ({
       },
 
       removeSelectionFromRealtime: (sessionId, userId, itemId) => {
-        set((s) => ({
-          selections: s.selections.filter(
-            (sel) => !(sel.sessionId === sessionId && sel.userId === userId && sel.itemId === itemId),
-          ),
-        }))
+        set((s) => {
+          const key = selectionKey(sessionId, userId, itemId)
+          const mutation = s.pendingSelectionMutations[key]
+          if (mutation?.desiredSelection) return s
+          return {
+            selections: replaceSelection(s.selections, key, null),
+          }
+        })
       },
 
       setParticipantLockFromRealtime: (sessionId, userId, locked) => {
-        set((s) => ({
-          sessions: s.sessions.map((sess) => {
-            if (sess.id !== sessionId) return sess
-            const lockedParticipantIds = sess.lockedParticipantIds ?? []
-            return {
-              ...sess,
-              lockedParticipantIds: locked
-                ? [...new Set([...lockedParticipantIds, userId])]
-                : lockedParticipantIds.filter((id) => id !== userId),
-            }
-          }),
-        }))
+        set((s) => {
+          const key = participantLockKey(sessionId, userId)
+          const pendingParticipantLocks = { ...s.pendingParticipantLocks }
+          const pendingLock = pendingParticipantLocks[key]
+          if (pendingLock && pendingLock.locked !== locked) return s
+          if (pendingLock) delete pendingParticipantLocks[key]
+          return {
+            sessions: s.sessions.map((session) => {
+              if (session.id !== sessionId) return session
+              const lockedParticipantIds = session.lockedParticipantIds ?? []
+              return {
+                ...session,
+                lockedParticipantIds: locked
+                  ? [...new Set([...lockedParticipantIds, userId])]
+                  : lockedParticipantIds.filter((id) => id !== userId),
+              }
+            }),
+            pendingParticipantLocks,
+          }
+        })
       },
 }))
