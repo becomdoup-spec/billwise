@@ -42,7 +42,7 @@ export function Header({ title, subtitle, back, onBack, showLogout, showExit, ri
           <button
             onClick={handleBack}
             aria-label="Go back"
-            className="p-2 -ml-2 rounded-xl text-fg-subtle hover:text-fg hover:bg-surface-overlay transition-all duration-200 active:scale-95"
+            className="-ml-2 flex h-11 w-11 items-center justify-center rounded-xl text-fg-subtle transition-[color,background-color,transform] duration-150 hover:bg-surface-overlay hover:text-fg active:scale-95"
           >
             <ArrowLeft size={20} />
           </button>
@@ -60,7 +60,7 @@ export function Header({ title, subtitle, back, onBack, showLogout, showExit, ri
             </span>
             <button
               onClick={handleLogout}
-              className="p-2 rounded-xl text-fg-subtle hover:text-fg hover:bg-surface-overlay transition-all duration-200 active:scale-95"
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-fg-subtle transition-[color,background-color,transform] duration-150 hover:bg-surface-overlay hover:text-fg active:scale-95"
               title="Sign out"
               aria-label="Sign out"
             >
@@ -73,7 +73,7 @@ export function Header({ title, subtitle, back, onBack, showLogout, showExit, ri
             onClick={handleExit}
             aria-label="Exit to dashboard"
             title="Back to dashboard"
-            className="p-2 rounded-xl text-fg-subtle hover:text-fg hover:bg-surface-overlay transition-all duration-200 active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-fg-subtle transition-[color,background-color,transform] duration-150 hover:bg-surface-overlay hover:text-fg active:scale-95"
           >
             <X size={20} />
           </button>

@@ -214,7 +214,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         {/* Option 1 — AI */}
         <button
           onClick={() => { setMode('ai'); setState('idle') }}
-          className="relative w-full flex items-start gap-4 overflow-hidden bg-primary/[0.08] border border-primary/35 hover:border-primary/60 hover:bg-primary/[0.12] rounded-2xl px-4 py-4 text-left transition-all group shadow-glow"
+          className="group relative flex w-full items-start gap-4 overflow-hidden rounded-2xl border border-primary/35 bg-primary/[0.08] px-4 py-4 text-left shadow-glow transition-[background-color,border-color,transform] duration-150 hover:border-primary/60 hover:bg-primary/[0.12]"
         >
           <span className="absolute right-3 top-3 rounded-full border border-primary/30 bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
             Recommended
@@ -233,7 +233,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         {/* Option 2 — Formatted */}
         <button
           onClick={() => { setMode('formatted'); setState('format-info') }}
-          className="w-full flex items-start gap-4 bg-surface border border-line hover:border-primary/40 hover:bg-primary/5 rounded-2xl px-4 py-4 text-left transition-all group"
+          className="group flex w-full items-start gap-4 rounded-2xl border border-line bg-surface px-4 py-4 text-left transition-[background-color,border-color,transform] duration-150 hover:border-primary/40 hover:bg-primary/5"
         >
           <div className="w-10 h-10 rounded-xl bg-surface-overlay border border-line flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-surface-raised transition-colors">
             <FileText size={18} className="text-fg-muted" />
@@ -255,7 +255,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
             setMode('manual')
             setState('done')
           }}
-          className="w-full flex items-start gap-4 bg-surface border border-line hover:border-primary/40 hover:bg-primary/5 rounded-2xl px-4 py-4 text-left transition-all group"
+          className="group flex w-full items-start gap-4 rounded-2xl border border-line bg-surface px-4 py-4 text-left transition-[background-color,border-color,transform] duration-150 hover:border-primary/40 hover:bg-primary/5"
         >
           <div className="w-10 h-10 rounded-xl bg-surface-overlay border border-line flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-surface-raised transition-colors">
             <PencilLine size={18} className="text-fg-muted" />
@@ -298,7 +298,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         <button
           type="button"
           onClick={copyAiPrompt}
-          className="w-full flex items-center justify-center gap-2 border border-line bg-surface hover:bg-surface-raised rounded-xl px-4 py-2.5 text-sm font-semibold text-fg transition-all active:scale-98"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-fg transition-[background-color,transform] duration-150 hover:bg-surface-raised active:scale-[0.98]"
         >
           {promptCopyStatus === 'copied' ? <Check size={15} className="text-success" /> : <Copy size={15} />}
           {promptCopyStatus === 'copied'
@@ -317,7 +317,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
 
         <button
           onClick={() => { setState('idle'); fileRef.current?.click() }}
-          className="w-full py-3 bg-primary hover:bg-primary-hover btn-sheen rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-98"
+          className="btn-sheen min-h-11 w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-fg transition-[background-color,transform] duration-150 hover:bg-primary-hover active:scale-[0.98]"
         >
           Got it — upload my bill →
         </button>
@@ -353,7 +353,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           onDragOver={(e) => e.preventDefault()}
           onClick={() => fileRef.current?.click()}
           className={clsx(
-            'relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all',
+            'relative cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-[background-color,border-color,transform] duration-150',
             state === 'error'
               ? 'border-danger/40 bg-danger/5'
               : 'border-line hover:border-primary/40 hover:bg-primary/5',
@@ -445,7 +445,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
               <div
                 key={mark}
                 className={clsx(
-                  'w-1 h-1 rounded-full transition-all duration-300',
+                  'w-1 h-1 rounded-full transition-[background-color,transform,opacity] duration-300',
                   pctRounded >= mark ? 'bg-primary' : 'bg-surface-overlay',
                 )}
               />
@@ -465,6 +465,12 @@ export function BillUpload({ onParsed }: BillUploadProps) {
   // ════════════════════════════════════════════════════════
   // ── DONE — review & edit ────────────────────────────────
   // ════════════════════════════════════════════════════════
+  const hasUnnamedItem = editBill.items.some((item) => !item.name.trim())
+  const canConfirmBill = editBill.items.length > 0 && !hasUnnamedItem
+  const billValidationMessage = editBill.items.length === 0
+    ? 'Add at least one item before continuing.'
+    : hasUnnamedItem ? 'Give every item a name before continuing.' : ''
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -478,7 +484,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           {preview && mode !== 'manual' && (
             <button
               onClick={resetToModeSelect}
-              className="text-xs px-3 py-1.5 rounded-lg border border-line bg-surface-overlay text-fg-muted hover:text-fg transition-all"
+              className="min-h-11 rounded-lg border border-line bg-surface-overlay px-3 py-2 text-xs text-fg-muted transition-[color,background-color,border-color] duration-150 hover:text-fg"
             >
               Re-upload
             </button>
@@ -495,17 +501,21 @@ export function BillUpload({ onParsed }: BillUploadProps) {
 
       {/* Restaurant & date */}
       <div className="bg-surface rounded-xl border border-line p-4 space-y-2">
+        <label htmlFor="bill-restaurant" className="text-xs font-medium text-fg-subtle">Restaurant</label>
         <input
+          id="bill-restaurant"
           value={editBill.restaurantName}
           onChange={(e) => setEditBill({ ...editBill, restaurantName: e.target.value })}
           placeholder="Restaurant name"
-          className="w-full bg-surface-raised border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60"
+          className="min-h-11 w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-fg placeholder-fg-faint focus:border-primary/60 focus:outline-none"
         />
+        <label htmlFor="bill-date" className="block pt-1 text-xs font-medium text-fg-subtle">Bill date</label>
         <input
+          id="bill-date"
           type="date"
           value={editBill.date}
           onChange={(e) => setEditBill({ ...editBill, date: e.target.value })}
-          className="w-full bg-surface-raised border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-primary/60"
+          className="min-h-11 w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-fg focus:border-primary/60 focus:outline-none"
         />
       </div>
 
@@ -515,7 +525,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           <span className="text-xs font-medium text-fg-muted uppercase tracking-wider">
             Items {editBill.items.length ? `(${editBill.items.length})` : ''}
           </span>
-          <button onClick={addItem} className="flex items-center gap-1 text-xs text-primary hover:text-primary-hover transition-colors">
+          <button type="button" onClick={addItem} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-primary transition-colors hover:bg-primary/10 hover:text-primary-hover">
             <Plus size={12} /> Add item
           </button>
         </div>
@@ -524,44 +534,53 @@ export function BillUpload({ onParsed }: BillUploadProps) {
             <div key={idx} className="px-4 py-3 space-y-2">
               <div className="flex items-center gap-2">
                 <input
+                  id={`bill-item-name-${idx}`}
+                  aria-label={`Item ${idx + 1} name`}
+                  aria-invalid={!item.name.trim()}
                   value={item.name}
                   onChange={(e) => updateItem(idx, 'name', e.target.value)}
                   placeholder="Item name"
-                  className="flex-1 bg-surface-raised border border-line rounded-lg px-3 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60"
+                  className="min-h-11 flex-1 rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-fg placeholder-fg-faint focus:border-primary/60 focus:outline-none aria-[invalid=true]:border-danger/50"
                 />
-                <button onClick={() => removeItem(idx)} className="p-1.5 text-fg-faint hover:text-danger transition-colors">
+                <button type="button" onClick={() => removeItem(idx)} aria-label={`Remove ${item.name || `item ${idx + 1}`}`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-fg-faint transition-colors hover:bg-danger/10 hover:text-danger">
                   <Trash2 size={14} />
                 </button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <div className="flex items-center gap-1 flex-1">
-                  <span className="text-xs text-fg-subtle shrink-0">Qty</span>
+                  <label htmlFor={`bill-item-quantity-${idx}`} className="text-xs text-fg-subtle shrink-0">Qty</label>
                   <button
                     type="button"
                     onClick={() => updateItem(idx, 'quantity', Math.max(1, item.quantity - 1))}
-                    className="w-7 h-8 rounded-lg border border-line bg-surface-raised text-fg-muted hover:text-fg"
+                    aria-label={`Decrease ${item.name || `item ${idx + 1}`} quantity`}
+                    className="h-11 w-11 rounded-lg border border-line bg-surface-raised text-fg-muted transition-colors hover:text-fg"
                   >−</button>
                   <input
+                    id={`bill-item-quantity-${idx}`}
+                    aria-label={`${item.name || `Item ${idx + 1}`} quantity`}
                     type="number" min="1" step="1" inputMode="numeric"
                     value={item.quantity || ''}
                     onFocus={(e) => e.currentTarget.select()}
                     onChange={(e) => updateItem(idx, 'quantity', Math.max(1, e.currentTarget.valueAsNumber || 1))}
-                    className="w-14 bg-surface-raised border border-line rounded-lg px-1 py-1.5 text-sm text-fg text-center focus:outline-none focus:border-primary/60"
+                    className="h-11 w-14 rounded-lg border border-line bg-surface-raised px-1 text-center text-sm text-fg focus:border-primary/60 focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => updateItem(idx, 'quantity', item.quantity + 1)}
-                    className="w-7 h-8 rounded-lg border border-line bg-surface-raised text-fg-muted hover:text-fg"
+                    aria-label={`Increase ${item.name || `item ${idx + 1}`} quantity`}
+                    className="h-11 w-11 rounded-lg border border-line bg-surface-raised text-fg-muted transition-colors hover:text-fg"
                   >+</button>
                 </div>
                 <div className="flex items-center gap-1 flex-1">
-                  <span className="text-xs text-fg-subtle shrink-0">₹</span>
+                  <label htmlFor={`bill-item-price-${idx}`} className="text-xs text-fg-subtle shrink-0">₹</label>
                   <input
+                    id={`bill-item-price-${idx}`}
+                    aria-label={`${item.name || `Item ${idx + 1}`} unit price`}
                     type="number" min="0" step="0.01"
                     value={item.unitPrice || ''}
                     onFocus={(e) => e.currentTarget.select()}
                     onChange={(e) => updateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
-                    className="w-full bg-surface-raised border border-line rounded-lg px-2 py-1.5 text-sm text-fg focus:outline-none focus:border-primary/60"
+                    className="h-11 w-full rounded-lg border border-line bg-surface-raised px-2 text-sm text-fg focus:border-primary/60 focus:outline-none"
                   />
                 </div>
                 <div className="text-sm font-medium text-fg py-1.5 shrink-0">
@@ -574,7 +593,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           {editBill.items.length === 0 && (
             <div className="py-6 text-center">
               <p className="text-xs text-fg-subtle">No items yet</p>
-              <button onClick={addItem} className="text-xs text-primary mt-1 hover:underline">
+              <button type="button" onClick={addItem} className="mt-1 min-h-11 rounded-lg px-3 text-xs text-primary hover:bg-primary/10">
                 Add an item
               </button>
             </div>
@@ -589,8 +608,9 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           <span className="text-fg">{formatCurrency(editBill.subtotal)}</span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm text-fg-muted">CGST</span>
+          <label htmlFor="bill-cgst" className="text-sm text-fg-muted">CGST</label>
           <input
+            id="bill-cgst"
             type="number" min="0" step="0.01"
             value={editBill.cgst || ''}
             onFocus={(e) => e.currentTarget.select()}
@@ -598,12 +618,13 @@ export function BillUpload({ onParsed }: BillUploadProps) {
               const cgst = parseFloat(e.target.value) || 0
               setEditBill((b) => ({ ...b, cgst, totalAmount: b.subtotal + cgst + b.sgst }))
             }}
-            className="w-28 bg-surface-raised border border-line rounded-lg px-2 py-1 text-sm text-fg text-right focus:outline-none focus:border-primary/60"
+            className="h-11 w-28 rounded-lg border border-line bg-surface-raised px-2 text-right text-sm text-fg focus:border-primary/60 focus:outline-none"
           />
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm text-fg-muted">SGST</span>
+          <label htmlFor="bill-sgst" className="text-sm text-fg-muted">SGST</label>
           <input
+            id="bill-sgst"
             type="number" min="0" step="0.01"
             value={editBill.sgst || ''}
             onFocus={(e) => e.currentTarget.select()}
@@ -611,28 +632,35 @@ export function BillUpload({ onParsed }: BillUploadProps) {
               const sgst = parseFloat(e.target.value) || 0
               setEditBill((b) => ({ ...b, sgst, totalAmount: b.subtotal + b.cgst + sgst }))
             }}
-            className="w-28 bg-surface-raised border border-line rounded-lg px-2 py-1 text-sm text-fg text-right focus:outline-none focus:border-primary/60"
+            className="h-11 w-28 rounded-lg border border-line bg-surface-raised px-2 text-right text-sm text-fg focus:border-primary/60 focus:outline-none"
           />
         </div>
         <div className="flex items-center justify-between gap-3 text-sm font-semibold pt-2 border-t border-line">
-          <span className="text-fg">Invoice total</span>
+          <label htmlFor="bill-total" className="text-fg">Invoice total</label>
           <input
+            id="bill-total"
             type="number" min="0" step="0.01" inputMode="decimal"
             value={editBill.totalAmount || ''}
             onFocus={(e) => e.currentTarget.select()}
             onChange={(e) => setEditBill((b) => ({ ...b, totalAmount: e.currentTarget.valueAsNumber || 0 }))}
-            className="w-32 bg-surface-raised border border-line rounded-lg px-2 py-1 text-sm text-primary text-right focus:outline-none focus:border-primary/60"
+            className="h-11 w-32 rounded-lg border border-line bg-surface-raised px-2 text-right text-sm text-primary focus:border-primary/60 focus:outline-none"
           />
         </div>
       </div>
 
       <button
         onClick={handleConfirm}
-        disabled={!editBill.items.length}
-        className="w-full py-3.5 bg-primary hover:bg-primary-hover btn-sheen shadow-glow disabled:shadow-none disabled:bg-surface-overlay disabled:text-fg-faint rounded-xl text-sm font-semibold text-primary-fg transition-all active:scale-98"
+        disabled={!canConfirmBill}
+        aria-describedby={billValidationMessage ? 'bill-form-guidance' : undefined}
+        className="min-h-11 w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-fg shadow-glow transition-[background-color,box-shadow,transform] duration-150 hover:bg-primary-hover active:scale-[0.98] disabled:bg-surface-overlay disabled:text-fg-faint disabled:shadow-none"
       >
         Use This Bill →
       </button>
+      {billValidationMessage && (
+        <p id="bill-form-guidance" role="status" className="flex items-center justify-center gap-1.5 text-xs text-warning">
+          <AlertCircle size={12} /> {billValidationMessage}
+        </p>
+      )}
     </div>
   )
 }

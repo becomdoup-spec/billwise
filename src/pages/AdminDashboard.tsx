@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Users, Receipt, Settings, ChevronRight, Clock,
-  CheckCircle, Sparkles, Eye, EyeOff, Trash2, ShieldCheck, ShieldOff, Check,
+  CheckCircle, Sparkles, Eye, EyeOff, Trash2, ShieldCheck, ShieldOff, Check, Loader2,
 } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
@@ -22,6 +22,8 @@ export function AdminDashboard() {
   const { sessions, currentUser, updateSession, deleteSession, users, billItems, selections } = useAppStore()
   const [tab, setTab] = useState<Tab>('sessions')
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null)
+  const [visibilityPendingId, setVisibilityPendingId] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   // A session is only truly "completed" when all participants locked AND every item has a selector.
   // Sessions with unallocated items stay in "Active" regardless of DB status.
@@ -29,10 +31,14 @@ export function AdminDashboard() {
   const completed = sessions.filter((s) => isSessionComplete(s, billItems[s.id] ?? [], selections.filter((sel) => sel.sessionId === s.id)))
 
   const togglePublic = async (session: Session) => {
+    if (visibilityPendingId === session.id) return
+    setVisibilityPendingId(session.id)
     try {
       await updateSession(session.id, { isPublic: !session.isPublic })
     } catch {
       toast.error('Session visibility could not be saved')
+    } finally {
+      setVisibilityPendingId('')
     }
   }
 
@@ -93,6 +99,7 @@ export function AdminDashboard() {
                       users={users}
                       onClick={() => navigate(`/session/${s.id}`)}
                       onTogglePublic={() => togglePublic(s)}
+                      visibilityPending={visibilityPendingId === s.id}
                       onDelete={() => setSessionToDelete(s)}
                     />
                   ))}
@@ -112,6 +119,7 @@ export function AdminDashboard() {
                       users={users}
                       onClick={() => navigate(`/session/${s.id}`)}
                       onTogglePublic={() => togglePublic(s)}
+                      visibilityPending={visibilityPendingId === s.id}
                       onDelete={() => setSessionToDelete(s)}
                     />
                   ))}
@@ -184,24 +192,29 @@ export function AdminDashboard() {
         <div className="flex gap-2 mt-5">
           <button
             onClick={() => setSessionToDelete(null)}
-            className="flex-1 py-2.5 rounded-xl border border-line text-sm text-fg-muted hover:bg-surface-overlay transition-colors"
+            disabled={deleting}
+            className="min-h-11 flex-1 rounded-xl border border-line py-2.5 text-sm text-fg-muted transition-colors hover:bg-surface-overlay disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={async () => {
               if (!sessionToDelete) return
+              setDeleting(true)
               try {
                 await deleteSession(sessionToDelete.id)
                 toast.info('Session deleted')
                 setSessionToDelete(null)
               } catch {
                 toast.error('Session could not be deleted from the database')
+              } finally {
+                setDeleting(false)
               }
             }}
-            className="flex-1 py-2.5 rounded-xl bg-danger/15 border border-danger/30 text-sm font-medium text-danger hover:bg-danger/25 transition-colors"
+            disabled={deleting}
+            className="min-h-11 flex-1 rounded-xl border border-danger/30 bg-danger/15 py-2.5 text-sm font-medium text-danger transition-colors hover:bg-danger/25 disabled:opacity-60"
           >
-            Delete session
+            {deleting ? 'Deleting…' : 'Delete session'}
           </button>
         </div>
       </Modal>
@@ -478,13 +491,14 @@ const statusConfig = {
 }
 
 function AdminSessionCard({
-  session, users, onClick, onTogglePublic, onDelete,
+  session, users, onClick, onTogglePublic, onDelete, visibilityPending,
 }: {
   session: Session
   users: User[]
   onClick: () => void
   onTogglePublic: () => void
   onDelete: () => void
+  visibilityPending: boolean
 }) {
   const cfg = statusConfig[session.status]
   const StatusIcon = cfg.icon
@@ -500,7 +514,7 @@ function AdminSessionCard({
       {/* Main row — clickable */}
       <button
         onClick={onClick}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-raised/50 transition-all group"
+        className="group flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-surface-raised/50"
       >
         <div className="w-9 h-9 rounded-lg bg-surface-overlay border border-line flex items-center justify-center shrink-0">
           <Receipt size={16} className="text-fg-muted" />
@@ -524,7 +538,7 @@ function AdminSessionCard({
       </button>
 
       {/* Footer bar — lock progress + visibility toggle */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-line/60 bg-canvas/40">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/60 bg-canvas/40 px-4 py-2">
         {/* Lock progress */}
         <div className="flex items-center gap-2">
           {participants.length > 0 ? (
@@ -562,22 +576,27 @@ function AdminSessionCard({
         <div className="flex items-center gap-1.5">
           <button
             onClick={(e) => { e.stopPropagation(); onDelete() }}
-            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-transparent text-fg-faint hover:text-danger hover:border-danger/25 hover:bg-danger/10 transition-all"
+            className="flex min-h-11 items-center gap-1.5 rounded-lg border border-transparent px-3 text-xs text-fg-faint transition-[color,border-color,background-color] duration-150 hover:border-danger/25 hover:bg-danger/10 hover:text-danger"
             title="Delete session"
           >
             <Trash2 size={10} /> Delete
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onTogglePublic() }}
+            disabled={visibilityPending}
+            aria-pressed={session.isPublic}
+            aria-label={session.isPublic ? 'Hide session from landing page' : 'Show session on landing page'}
             title={session.isPublic ? 'Shown on landing page — click to hide' : 'Hidden from landing page — click to show'}
             className={clsx(
-              'flex items-center gap-1.5 text-[10px] font-medium px-2.5 py-1 rounded-full border transition-all',
+              'flex min-h-11 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-[color,background-color,border-color] duration-150 disabled:opacity-60',
               session.isPublic
                 ? 'bg-primary/15 border-primary/35 text-primary'
                 : 'bg-surface-overlay border-line text-fg-subtle hover:text-fg-muted',
             )}
           >
-            {session.isPublic ? <Eye size={10} /> : <EyeOff size={10} />}
+            {visibilityPending
+              ? <Loader2 size={12} className="animate-spin" />
+              : session.isPublic ? <Eye size={12} /> : <EyeOff size={12} />}
             {session.isPublic ? 'On landing' : 'Off landing'}
           </button>
         </div>
