@@ -3,7 +3,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { Check, Sliders, Lock, CircleCheck, Clock3, TriangleAlert, Trash2, Users } from 'lucide-react'
+import { Check, Sliders, Lock, CircleCheck, Clock3, TriangleAlert, Trash2 } from 'lucide-react'
 import type { BillItem, ItemSelection, User } from '../../types'
 import { formatCurrency, getAllocatedPortion } from '../../services/calculations'
 import { Modal } from '../shared/Modal'
@@ -102,10 +102,6 @@ export function ItemCard({
   const allocatedPortion = getAllocatedPortion(itemSelections)
   const allocationOver = allocatedPortion > 100.01
   const equalShareSelections = itemSelections.filter((itemSelection) => itemSelection.portionPercentage === 100)
-  const equalShareParticipants = equalShareSelections.flatMap((itemSelection) => {
-    const participant = participants.find((candidate) => candidate.id === itemSelection.userId)
-    return participant ? [{ participant, selection: itemSelection }] : []
-  })
   const allParticipantsLocked = participants.length > 0
     && participants.every((participant) => lockedParticipantIds.includes(participant.id))
   const equalSplitPending = equalShareSelections.length > 0 && !allParticipantsLocked && !allocationOver
@@ -366,47 +362,7 @@ export function ItemCard({
           </div>
 
           {/* Item allocation status */}
-          {equalSplitPending ? (
-            <div className="flex items-start gap-2 rounded-lg border border-info/20 bg-info/[0.07] px-2.5 py-2">
-              <Users size={12} className="mt-0.5 shrink-0 text-info" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold text-info">
-                  {equalShareSelections.length} {equalShareSelections.length === 1 ? 'person is' : 'people are'} ready to split equally
-                </p>
-                <p className="mt-0.5 text-[10px] leading-relaxed text-fg-subtle">
-                  Final shares are calculated after everyone locks their choices.
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5" aria-label="People sharing this item equally">
-                  {equalShareParticipants.map(({ participant, selection: equalSelection }) => {
-                    const color = avatarColor(participant.id)
-                    const isMe = participant.id === currentUserId
-                    return (
-                      <span
-                        key={participant.id}
-                        title={`${participant.name} chose an equal split`}
-                        className="inline-flex min-h-6 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium"
-                        style={{
-                          background: `${color}14`,
-                          borderColor: `${color}40`,
-                          color,
-                        }}
-                      >
-                        <span
-                          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold text-white"
-                          style={{ background: color }}
-                          aria-hidden="true"
-                        >
-                          {participant.name[0]?.toUpperCase()}
-                        </span>
-                        {isMe ? 'You' : participant.name.split(' ')[0]}
-                        {equalSelection.lockedAt && <Lock size={8} aria-label="Locked" />}
-                      </span>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : (
+          {!equalSplitPending && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2 text-[10px] font-medium">
                 <span className={clsx(
