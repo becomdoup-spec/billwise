@@ -3,9 +3,41 @@
  * Each function is a no-op (returns empty / null) when Supabase is not configured.
  */
 import { supabase } from './supabase'
-import type { User, Session, BillItem, ItemSelection } from '../types'
+import type { User, Session, BillItem, ItemSelection, Group } from '../types'
+
+// ── Groups schema availability ────────────────────────────────────
+// The groups feature needs a one-time migration (see SUPABASE_SETUP.md).
+// Until it runs, every group-aware query falls back to legacy behaviour
+// and this flag lets the UI explain what is missing.
+
+let groupsSchemaMissingFlag = false
+
+export function isGroupsSchemaMissing() {
+  return groupsSchemaMissingFlag
+}
+
+function isMissingSchemaError(error: { code?: string } | null | undefined): boolean {
+  // 42P01/PGRST205: missing table · 42703: missing column · PGRST204: missing insert column
+  return Boolean(error?.code && ['42P01', 'PGRST205', '42703', 'PGRST204'].includes(error.code))
+}
+
+/** Apply a group filter to a PostgREST query builder. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function scopeToGroup<T extends { eq: any; is: any }>(query: T, groupId: string | null): T {
+  return groupId === null ? query.is('group_id', null) : query.eq('group_id', groupId)
+}
 
 // ── Row → local type mappers ──────────────────────────────────────
+
+function rowToGroup(r: Record<string, unknown>): Group {
+  return {
+    id: r.id as string,
+    name: r.name as string,
+    inviteCode: r.invite_code as string,
+    ownerEmail: r.owner_email as string,
+    createdAt: r.created_at as string,
+  }
+}
 
 function rowToUser(r: Record<string, unknown>): User {
   return {
@@ -13,6 +45,7 @@ function rowToUser(r: Record<string, unknown>): User {
     name: r.name as string,
     pin: r.pin_hash as string,        // stored as pin_hash, used as pin locally
     role: r.role as 'admin' | 'user',
+    groupId: (r.group_id as string | null | undefined) ?? null,
     createdAt: r.created_at as string,
   }
 }
@@ -25,6 +58,7 @@ function rowToSession(
   return {
     id: r.id as string,
     orderId: r.order_id as string,
+    groupId: (r.group_id as string | null | undefined) ?? null,
     restaurantName: (r.restaurant_name as string) ?? '',
     date: r.date as string,
     billImageUrl: r.bill_image_url as string | undefined,
@@ -65,27 +99,132 @@ function rowToSelection(r: Record<string, unknown>): ItemSelection {
   }
 }
 
+// ── Groups ────────────────────────────────────────────────────────
+
+export class GroupsSchemaMissingError extends Error {
+  constructor() {
+    super('Groups needs a one-time database upgrade. Run the "Groups" SQL from SUPABASE_SETUP.md in the Supabase SQL editor.')
+    this.name = 'GroupsSchemaMissingError'
+  }
+}
+
+export async function dbCreateGroup(group: Group): Promise<void> {
+  if (!supabase) return
+  const { error } = await supabase.from('groups').insert({
+    id: group.id,
+    name: group.name,
+    invite_code: group.inviteCode,
+    owner_email: group.ownerEmail,
+    created_at: group.createdAt,
+  })
+  if (error) {
+    console.error('[db] createGroup', error)
+    if (isMissingSchemaError(error)) { groupsSchemaMissingFlag = true; throw new GroupsSchemaMissingError() }
+    throw error
+  }
+}
+
+export async function dbGetGroupByCode(inviteCode: string): Promise<Group | null> {
+  if (!supabase) return null
+  const { data, error } = await supabase.from('groups').select('*').eq('invite_code', inviteCode).maybeSingle()
+  if (error) {
+    console.error('[db] getGroupByCode', error)
+    if (isMissingSchemaError(error)) { groupsSchemaMissingFlag = true; throw new GroupsSchemaMissingError() }
+    throw error
+  }
+  return data ? rowToGroup(data) : null
+}
+
+/**
+ * Resolve a group from whatever the user typed: an invite code ("ABCD"),
+ * a full invite link, or the group's name ("Hyderabad Group").
+ */
+export async function dbFindGroupByInput(rawInput: string): Promise<Group | null> {
+  if (!supabase) return null
+  const trimmed = rawInput.trim()
+  if (!trimmed) return null
+
+  const codeCandidate = (trimmed.match(/\/join\/([a-z0-9]+)/i)?.[1] ?? trimmed).toLowerCase()
+  if (/^[a-z0-9]{4,16}$/.test(codeCandidate)) {
+    const byCode = await dbGetGroupByCode(codeCandidate)
+    if (byCode) return byCode
+  }
+
+  // Fall back to an exact (case-insensitive) name match.
+  const { data, error } = await supabase.from('groups').select('*').ilike('name', trimmed)
+  if (error) {
+    console.error('[db] findGroupByInput', error)
+    if (isMissingSchemaError(error)) { groupsSchemaMissingFlag = true; throw new GroupsSchemaMissingError() }
+    throw error
+  }
+  if ((data ?? []).length > 1) {
+    throw new Error('Several groups share that name — use the group code instead.')
+  }
+  return data?.[0] ? rowToGroup(data[0]) : null
+}
+
+export async function dbGetGroupById(id: string): Promise<Group | null> {
+  if (!supabase) return null
+  const { data, error } = await supabase.from('groups').select('*').eq('id', id).maybeSingle()
+  if (error) {
+    console.error('[db] getGroupById', error)
+    if (isMissingSchemaError(error)) { groupsSchemaMissingFlag = true; return null }
+    throw error
+  }
+  return data ? rowToGroup(data) : null
+}
+
 // ── Users ─────────────────────────────────────────────────────────
 
-export async function dbGetUsers(): Promise<User[]> {
+/**
+ * Fetch users, scoped to a group when the groups schema exists.
+ * `groupId === null` → legacy shared space (rows without a group).
+ * `groupId === undefined` → no scoping (all rows).
+ */
+export async function dbGetUsers(groupId?: string | null): Promise<User[]> {
   if (!supabase) return []
+  if (groupId !== undefined && !groupsSchemaMissingFlag) {
+    const { data, error } = await scopeToGroup(supabase.from('users').select('*'), groupId).order('created_at')
+    if (!error) return (data ?? []).map(rowToUser)
+    if (!isMissingSchemaError(error)) { console.error('[db] getUsers', error); throw error }
+    groupsSchemaMissingFlag = true // fall through to the unscoped query
+  }
   const { data, error } = await supabase.from('users').select('*').order('created_at')
   if (error) { console.error('[db] getUsers', error); throw error }
   return (data ?? []).map(rowToUser)
 }
 
-export async function dbFindUserByPin(pinHash: string): Promise<User | null> {
+export async function dbFindUserByPin(pinHash: string, groupId?: string | null): Promise<User | null> {
   if (!supabase) return null
+  if (groupId !== undefined && !groupsSchemaMissingFlag) {
+    const { data, error } = await scopeToGroup(
+      supabase.from('users').select('*').eq('pin_hash', pinHash),
+      groupId,
+    ).maybeSingle()
+    if (!error) return data ? rowToUser(data) : null
+    if (isMissingSchemaError(error)) groupsSchemaMissingFlag = true
+  }
   const { data } = await supabase.from('users').select('*').eq('pin_hash', pinHash).maybeSingle()
   return data ? rowToUser(data) : null
 }
 
 export async function dbCreateUser(user: User): Promise<void> {
   if (!supabase) return
-  const { error } = await supabase.from('users').upsert({
+  const row: Record<string, unknown> = {
     id: user.id, name: user.name, pin_hash: user.pin, role: user.role, created_at: user.createdAt,
-  })
-  if (error) { console.error('[db] createUser', error); throw error }
+  }
+  if (!groupsSchemaMissingFlag) row.group_id = user.groupId ?? null
+  const { error } = await supabase.from('users').upsert(row)
+  if (error) {
+    if (isMissingSchemaError(error) && 'group_id' in row) {
+      groupsSchemaMissingFlag = true
+      delete row.group_id
+      const retry = await supabase.from('users').upsert(row)
+      if (!retry.error) return
+      console.error('[db] createUser', retry.error); throw retry.error
+    }
+    console.error('[db] createUser', error); throw error
+  }
 }
 
 export async function dbUpdateUserPin(userId: string, pinHash: string): Promise<void> {
@@ -102,12 +241,19 @@ export async function dbDeleteUser(userId: string): Promise<void> {
 
 // ── Sessions ──────────────────────────────────────────────────────
 
-export async function dbGetSessions(): Promise<Session[]> {
+export async function dbGetSessions(groupId?: string | null): Promise<Session[]> {
   if (!supabase) return []
-  const [sessRes, lockedPartRes] = await Promise.all([
-    supabase.from('sessions').select('*').order('created_at', { ascending: false }),
+  const sessionsQuery = groupId !== undefined && !groupsSchemaMissingFlag
+    ? scopeToGroup(supabase.from('sessions').select('*'), groupId).order('created_at', { ascending: false })
+    : supabase.from('sessions').select('*').order('created_at', { ascending: false })
+  let [sessRes, lockedPartRes] = await Promise.all([
+    sessionsQuery,
     supabase.from('session_participants').select('session_id, user_id, locked_at'),
   ])
+  if (sessRes.error && isMissingSchemaError(sessRes.error)) {
+    groupsSchemaMissingFlag = true
+    sessRes = await supabase.from('sessions').select('*').order('created_at', { ascending: false })
+  }
   if (sessRes.error) { console.error('[db] getSessions', sessRes.error); throw sessRes.error }
 
   let partRes = lockedPartRes
@@ -137,7 +283,7 @@ export async function dbGetSessions(): Promise<Session[]> {
 
 export async function dbCreateSession(session: Session): Promise<void> {
   if (!supabase) return
-  const { error } = await supabase.from('sessions').upsert({
+  const row: Record<string, unknown> = {
     id: session.id,
     order_id: session.orderId,
     restaurant_name: session.restaurantName,
@@ -150,8 +296,19 @@ export async function dbCreateSession(session: Session): Promise<void> {
     total_amount: session.totalAmount,
     created_by: session.createdBy || null,
     created_at: session.createdAt,
-  })
-  if (error) { console.error('[db] createSession', error); throw error }
+  }
+  if (!groupsSchemaMissingFlag) row.group_id = session.groupId ?? null
+  const { error } = await supabase.from('sessions').upsert(row)
+  if (error) {
+    if (isMissingSchemaError(error) && 'group_id' in row) {
+      groupsSchemaMissingFlag = true
+      delete row.group_id
+      const retry = await supabase.from('sessions').upsert(row)
+      if (!retry.error) return
+      console.error('[db] createSession', retry.error); throw retry.error
+    }
+    console.error('[db] createSession', error); throw error
+  }
   // participants synced separately
 }
 
@@ -174,7 +331,11 @@ export async function dbUpdateSession(id: string, data: Partial<Session>): Promi
   }
 }
 
-export async function dbUploadBillImage(sessionId: string, imageDataUrl: string): Promise<string | null> {
+export async function dbUploadBillImage(
+  sessionId: string,
+  imageDataUrl: string,
+  fileBaseName = 'original',
+): Promise<string | null> {
   if (!supabase) return null
   const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/)
   if (!match) return null
@@ -182,13 +343,19 @@ export async function dbUploadBillImage(sessionId: string, imageDataUrl: string)
   const contentType = match[1]
   const extension = contentType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
   const bytes = Uint8Array.from(atob(match[2]), (char) => char.charCodeAt(0))
-  const path = `${sessionId}/original.${extension}`
+  const path = `${sessionId}/${fileBaseName}.${extension}`
   const { error } = await supabase.storage.from('bill-images').upload(path, bytes, {
     contentType,
     upsert: true,
   })
   if (error) { console.error('[db] uploadBillImage', error); return null }
   return path
+}
+
+export async function dbDeleteBillImage(path: string): Promise<void> {
+  if (!supabase || !path || path.startsWith('http') || path.startsWith('data:')) return
+  const { error } = await supabase.storage.from('bill-images').remove([path])
+  if (error) console.error('[db] deleteBillImage', error) // best-effort cleanup only
 }
 
 export async function dbGetBillImageUrl(path: string): Promise<string | null> {

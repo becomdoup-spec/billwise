@@ -190,6 +190,13 @@ export function generateId(): string {
   return crypto.randomUUID()
 }
 
+/** Short, unambiguous code for group invite links — easy to type from a screen. */
+export function generateInviteCode(): string {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789'
+  const bytes = crypto.getRandomValues(new Uint8Array(6))
+  return Array.from(bytes, (b) => chars[b % chars.length]).join('')
+}
+
 export function hashPin(pin: string): string {
   // Simple deterministic hash for local storage demo
   // In production: use bcrypt via Supabase Edge Function

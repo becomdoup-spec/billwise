@@ -1,12 +1,12 @@
 import { create } from 'zustand'
-import type { User, Session, BillItem, ItemSelection } from '../types'
-import { generateId, getSessionCompletionState, hashPin } from '../services/calculations'
+import type { User, Session, BillItem, ItemSelection, Group } from '../types'
+import { generateId, generateInviteCode, getSessionCompletionState, hashPin } from '../services/calculations'
 import {
   dbFindUserByPin, dbCreateUser, dbUpdateUserPin, dbDeleteUser, dbGetUsers,
   dbCreateSession, dbUpdateSession, dbDeleteSession, dbUploadBillImage, dbAddParticipant, dbRemoveParticipant,
   dbSetBillItems, dbCreateBillItem, dbUpdateBillItem, dbDeleteBillItem,
   dbUpsertSelection, dbDeleteSelection, dbLockUserSelections, dbUnlockUserSelections,
-  dbSetAppSetting,
+  dbSetAppSetting, dbCreateGroup,
 } from '../lib/db'
 import { applyAdminDefaultTheme } from './themeStore'
 import type { Theme } from './themeStore'
@@ -41,6 +41,18 @@ interface AppStore {
   cloudSyncError: string
   selectionsReady: boolean
 
+  // Groups — the active space everything is scoped to (null = no group entered yet)
+  activeGroupId: string | null
+  activeGroup: Group | null
+  knownGroups: KnownGroup[]
+  legacyBypass: boolean
+  setActiveGroup: (group: Group | null) => void
+  hydrateActiveGroup: (group: Group | null) => void
+  rememberGroup: (group: Group) => void
+  forgetGroup: (groupId: string) => void
+  setLegacyBypass: (value: boolean) => void
+  createGroup: (name: string, ownerEmail: string, adminName: string, adminPin: string) => Promise<{ group: Group; admin: User }>
+
   // Settings
   requirePin: boolean
   setRequirePin: (val: boolean) => Promise<void>
@@ -69,7 +81,7 @@ interface AppStore {
   createSession: (data: Omit<Session, 'id' | 'orderId' | 'createdAt' | 'participantIds' | 'lockedParticipantIds' | 'status'>) => Promise<Session>
   updateSession: (id: string, data: Partial<Session>) => Promise<void>
   deleteSession: (id: string) => Promise<void>
-  saveBillImage: (sessionId: string, imageDataUrl: string) => Promise<boolean>
+  saveBillImage: (sessionId: string, imageDataUrl: string, fileBaseName?: string) => Promise<boolean>
   addParticipant: (sessionId: string, userId: string) => Promise<void>
   removeParticipant: (sessionId: string, userId: string) => Promise<void>
   lockSession: (sessionId: string) => Promise<void>
@@ -120,6 +132,42 @@ function keyForSelection(selection: ItemSelection) {
 
 function participantLockKey(sessionId: string, userId: string) {
   return `${sessionId}:${userId}`
+}
+
+export const ACTIVE_GROUP_STORAGE_KEY = 'billwise-active-group-id'
+const KNOWN_GROUPS_STORAGE_KEY = 'billwise-known-groups'
+const LEGACY_BYPASS_STORAGE_KEY = 'billwise-legacy-bypass'
+const MAX_KNOWN_GROUPS = 6
+
+/** A group this device has entered before — powers tap-to-enter on the gate. */
+export interface KnownGroup {
+  id: string
+  name: string
+  inviteCode: string
+  lastUsedAt: string
+}
+
+function readStoredGroupId(): string | null {
+  if (typeof window === 'undefined') return null
+  return window.localStorage.getItem(ACTIVE_GROUP_STORAGE_KEY)
+}
+
+function readKnownGroups(): KnownGroup[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(KNOWN_GROUPS_STORAGE_KEY) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((entry): entry is KnownGroup => (
+      Boolean(entry && typeof entry.id === 'string' && typeof entry.name === 'string' && typeof entry.inviteCode === 'string')
+    ))
+  } catch {
+    return []
+  }
+}
+
+function writeKnownGroups(groups: KnownGroup[]) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(KNOWN_GROUPS_STORAGE_KEY, JSON.stringify(groups))
 }
 
 function replaceSelection(
@@ -193,6 +241,91 @@ export const useAppStore = create<AppStore>((set, get) => ({
       requirePin: true,
       showCompletedBills: true,
       defaultTheme: 'light',
+      activeGroupId: readStoredGroupId(),
+      activeGroup: null,
+      knownGroups: readKnownGroups(),
+      legacyBypass: typeof window !== 'undefined'
+        && window.localStorage.getItem(LEGACY_BYPASS_STORAGE_KEY) === 'true',
+
+      rememberGroup: (group) => {
+        set((s) => {
+          const entry: KnownGroup = {
+            id: group.id,
+            name: group.name,
+            inviteCode: group.inviteCode,
+            lastUsedAt: new Date().toISOString(),
+          }
+          const knownGroups = [entry, ...s.knownGroups.filter((g) => g.id !== group.id)]
+            .slice(0, MAX_KNOWN_GROUPS)
+          writeKnownGroups(knownGroups)
+          return { knownGroups }
+        })
+      },
+
+      forgetGroup: (groupId) => {
+        set((s) => {
+          const knownGroups = s.knownGroups.filter((g) => g.id !== groupId)
+          writeKnownGroups(knownGroups)
+          return { knownGroups }
+        })
+      },
+
+      setLegacyBypass: (value) => {
+        if (typeof window !== 'undefined') {
+          if (value) window.localStorage.setItem(LEGACY_BYPASS_STORAGE_KEY, 'true')
+          else window.localStorage.removeItem(LEGACY_BYPASS_STORAGE_KEY)
+        }
+        set({ legacyBypass: value })
+      },
+
+      setActiveGroup: (group) => {
+        if (typeof window !== 'undefined') {
+          if (group) window.localStorage.setItem(ACTIVE_GROUP_STORAGE_KEY, group.id)
+          else window.localStorage.removeItem(ACTIVE_GROUP_STORAGE_KEY)
+        }
+        // Switching spaces resets the visible data; the init hook re-fetches scoped rows.
+        set({
+          activeGroupId: group?.id ?? null,
+          activeGroup: group,
+          currentUser: null,
+          users: [],
+          sessions: [],
+          billItems: {},
+          selections: [],
+          pendingSessionIds: [],
+          pendingSelectionMutations: {},
+          pendingParticipantLocks: {},
+          selectionsReady: false,
+          cloudReady: !supabase,
+        })
+      },
+
+      hydrateActiveGroup: (group) => set({ activeGroup: group }),
+
+      createGroup: async (name, ownerEmail, adminName, adminPin) => {
+        requireCloudConnection()
+        const group: Group = {
+          id: generateId(),
+          name,
+          inviteCode: generateInviteCode(),
+          ownerEmail,
+          createdAt: new Date().toISOString(),
+        }
+        await dbCreateGroup(group)
+        const admin: User = {
+          id: generateId(),
+          name: adminName,
+          pin: hashPin(adminPin),
+          role: 'admin',
+          groupId: group.id,
+          createdAt: new Date().toISOString(),
+        }
+        await dbCreateUser(admin)
+        get().rememberGroup(group)
+        get().setActiveGroup(group)
+        set({ currentUser: admin, users: [admin] })
+        return { group, admin }
+      },
 
       setRequirePin: async (val) => {
         set({ requirePin: val })
@@ -225,7 +358,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const h = hashPin(pin)
         // Try Supabase first (cross-device), fall back to local
         if (supabase) {
-          const dbUser = await dbFindUserByPin(h)
+          const dbUser = await dbFindUserByPin(h, get().activeGroupId)
           if (dbUser) {
             // Keep local store in sync
             set((s) => ({
@@ -252,13 +385,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
           name,
           pin: hashPin(pin),
           role,
+          groupId: get().activeGroupId,
           createdAt: new Date().toISOString(),
         }
         await dbCreateUser(user)
         // Optimistic update first so it shows instantly on this device
         set((s) => ({ users: [...s.users.filter((u) => u.id !== user.id), user] }))
         // Then sync full list from Supabase to guarantee consistency
-        dbGetUsers().then((fresh) => {
+        dbGetUsers(get().activeGroupId).then((fresh) => {
           if (fresh.length > 0) set({ users: fresh })
         }).catch(() => {/* silent — optimistic update is already applied */})
         return user
@@ -296,6 +430,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           orderId: Array.from({ length: 8 }, () =>
             'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)],
           ).join(''),
+          groupId: get().activeGroupId,
           status: 'active',
 	          isPublic: data.isPublic,
           participantIds: [],
@@ -355,9 +490,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         })
       },
 
-      saveBillImage: async (sessionId, imageDataUrl) => {
+      saveBillImage: async (sessionId, imageDataUrl, fileBaseName = 'original') => {
         requireCloudConnection()
-        const path = await dbUploadBillImage(sessionId, imageDataUrl)
+        const path = await dbUploadBillImage(sessionId, imageDataUrl, fileBaseName)
         const storedImage = path ?? imageDataUrl
         set((s) => ({
           sessions: s.sessions.map((sess) =>

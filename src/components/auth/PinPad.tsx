@@ -63,9 +63,9 @@ export function PinPad({ onComplete, error, label, maxLength = 6 }: PinPadProps)
           <div
             key={i}
             className={clsx(
-              'w-3.5 h-3.5 rounded-full border-2 transition-all duration-200',
+              'w-3.5 h-3.5 rounded-full border-2 transition-colors duration-200',
               i < pin.length
-                ? 'bg-primary border-primary scale-110'
+                ? 'bg-primary border-primary anim-dot-pop shadow-glow'
                 : 'bg-transparent border-line-strong',
             )}
           />
@@ -86,7 +86,7 @@ export function PinPad({ onComplete, error, label, maxLength = 6 }: PinPadProps)
               onClick={() => handleKey(key)}
               aria-label={key === 'del' ? 'Delete' : `Digit ${key}`}
               className={clsx(
-                'h-14 rounded-2xl text-lg font-medium transition-all duration-150 active:scale-90',
+                'h-14 rounded-2xl text-lg font-medium transition-[background-color,border-color,color,transform,box-shadow] duration-150 active:scale-90 active:bg-primary/15 active:border-primary/40',
                 key === 'del'
                   ? 'bg-surface-overlay border border-line text-fg-muted hover:text-fg hover:bg-surface-hover'
                   : 'bg-surface border border-line text-fg hover:bg-surface-overlay hover:border-line-strong',

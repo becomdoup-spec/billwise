@@ -1,10 +1,10 @@
 /**
- * Runs once on app start — loads users and sessions from Supabase
- * and hydrates the local Zustand store.
+ * Runs on app start and whenever the active group changes — loads the
+ * group-scoped users and sessions from Supabase and hydrates the store.
  */
 import { useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections, dbGetAppSetting, dbUpdateSession } from '../lib/db'
+import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections, dbGetAppSetting, dbGetGroupById, dbUpdateSession } from '../lib/db'
 import { useAppStore } from '../store/appStore'
 import { isSessionComplete } from '../services/calculations'
 import type { BillItem, ItemSelection } from '../types'
@@ -17,8 +17,10 @@ export function useSupabaseInit() {
     hydrateRequirePin,
     hydrateShowCompletedBills,
     hydrateDefaultTheme,
+    hydrateActiveGroup,
     setCloudSyncState,
   } = useAppStore()
+  const activeGroupId = useAppStore((state) => state.activeGroupId)
 
   useEffect(() => {
     // Remove data persisted by older builds. Supabase is the source of truth.
@@ -27,12 +29,23 @@ export function useSupabaseInit() {
     const client = supabase
     let refreshVersion = 0
 
+    // Resolve the active group row once for display (name, invite link).
+    if (activeGroupId) {
+      dbGetGroupById(activeGroupId).then((group) => {
+        if (useAppStore.getState().activeGroupId !== activeGroupId) return
+        if (group) hydrateActiveGroup(group)
+        else useAppStore.getState().setActiveGroup(null) // deleted or migration missing → shared space
+      }).catch(() => undefined)
+    } else {
+      hydrateActiveGroup(null)
+    }
+
     const refresh = async () => {
       const version = ++refreshVersion
       try {
         const [users, sessions, items, selections, requirePinVal, showCompletedVal, defaultThemeVal] = await Promise.all([
-          dbGetUsers(),
-          dbGetSessions(),
+          dbGetUsers(activeGroupId),
+          dbGetSessions(activeGroupId),
           dbGetAllBillItems(),
           dbGetAllSelections(),
           dbGetAppSetting('require_pin'),
@@ -40,21 +53,26 @@ export function useSupabaseInit() {
           dbGetAppSetting('default_theme'),
         ])
         if (version !== refreshVersion) return
+        // Bill items and selections carry no group column — scope them via the
+        // group's session ids so a group only ever sees its own bill data.
+        const sessionIds = new Set(sessions.map((s) => s.id))
+        const scopedItems = items.filter((item) => sessionIds.has(item.sessionId))
+        const scopedSelections = selections.filter((sel) => sessionIds.has(sel.sessionId))
         hydrateFromSupabase(users, sessions)
-        hydrateBillItemsFromSupabase(items)
+        hydrateBillItemsFromSupabase(scopedItems)
         if (requirePinVal !== null) hydrateRequirePin(requirePinVal !== 'false')
         if (showCompletedVal !== null) hydrateShowCompletedBills(showCompletedVal !== 'false')
         if (defaultThemeVal !== null) hydrateDefaultTheme(defaultThemeVal)
         // Keep this last: selectionsReady means every split input is hydrated.
-        hydrateSelectionsFromSupabase(selections)
+        hydrateSelectionsFromSupabase(scopedSelections)
 
         // Auto-revert sessions that are marked "completed" in the DB but are
         // no longer fully locked and allocated.
-        const itemsBySession = items.reduce<Record<string, BillItem[]>>((acc, item) => {
+        const itemsBySession = scopedItems.reduce<Record<string, BillItem[]>>((acc, item) => {
           ;(acc[item.sessionId] ??= []).push(item)
           return acc
         }, {})
-        const selsBySession = selections.reduce<Record<string, ItemSelection[]>>((acc, sel) => {
+        const selsBySession = scopedSelections.reduce<Record<string, ItemSelection[]>>((acc, sel) => {
           ;(acc[sel.sessionId] ??= []).push(sel)
           return acc
         }, {})
@@ -92,9 +110,10 @@ export function useSupabaseInit() {
     window.addEventListener('focus', refresh)
 
     return () => {
+      refreshVersion++ // invalidate in-flight refreshes from the previous scope
       window.clearInterval(refreshTimer)
       window.removeEventListener('focus', refresh)
       client.removeChannel(channel)
     }
-  }, [])
+  }, [activeGroupId])
 }

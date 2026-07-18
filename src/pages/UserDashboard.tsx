@@ -34,6 +34,7 @@ export function UserDashboard() {
     cloudSyncError,
     selectionsReady,
     deleteSession,
+    activeGroup,
   } = useAppStore()
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -65,7 +66,7 @@ export function UserDashboard() {
     <Layout>
       <Header
         title="My Bills"
-        subtitle={currentUser?.name}
+        subtitle={activeGroup ? `${currentUser?.name} · ${activeGroup.name}` : currentUser?.name}
         showLogout
         rightAction={
           <button

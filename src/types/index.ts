@@ -1,11 +1,20 @@
 export type UserRole = 'admin' | 'user'
 
+export interface Group {
+  id: string
+  name: string
+  inviteCode: string   // short code used in the shareable join link
+  ownerEmail: string   // email that registered the group
+  createdAt: string
+}
+
 export interface User {
   id: string
   name: string
   pin: string // hashed in DB, plain for local demo
   role: UserRole
   avatar?: string
+  groupId?: string | null // null = legacy shared space
   createdAt: string
 }
 
@@ -24,6 +33,7 @@ export type SessionStatus = 'active' | 'locked' | 'completed'
 export interface Session {
   id: string
   orderId: string
+  groupId?: string | null // null = legacy shared space
   restaurantName: string
   date: string
   billImageUrl?: string

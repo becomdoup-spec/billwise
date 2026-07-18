@@ -116,7 +116,7 @@ export function Modal({ open, onClose, title, children, size = 'md', dismissible
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative flex max-h-[calc(100dvh-0.5rem)] w-full ${widths[size]} flex-col overflow-hidden rounded-t-2xl border border-line bg-surface-raised shadow-overlay transition-[opacity,transform] duration-[280ms] ease-out sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:duration-200 ${visible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-5 scale-100 opacity-0 sm:translate-y-2 sm:scale-[0.98]'}`}
+        className={`relative flex max-h-[calc(100dvh-0.5rem)] w-full ${widths[size]} flex-col overflow-hidden rounded-t-2xl border border-line bg-surface-raised shadow-overlay transition-[opacity,transform] duration-[320ms] ease-[cubic-bezier(0.32,0.72,0,1)] sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:duration-[260ms] ${visible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-6 scale-100 opacity-0 sm:translate-y-2 sm:scale-[0.97]'}`}
       >
         <div className="flex shrink-0 items-center justify-between px-5 py-4 border-b border-line">
           <h2 id={titleId} className="text-base font-semibold text-fg tracking-tight">{title}</h2>

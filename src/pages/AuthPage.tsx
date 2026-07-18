@@ -3,12 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections } from '../lib/db'
 import {
   AlertCircle, ArrowLeft, Loader2, ReceiptText, UserRound,
-  Clock, CheckCircle, ChevronRight,
+  Clock, CheckCircle, ChevronRight, UserRoundPlus, DoorOpen,
 } from 'lucide-react'
 import { PinPad } from '../components/auth/PinPad'
 import { HoneycombGrid } from '../components/auth/HoneycombGrid'
 import { ThemeToggle } from '../components/shared/ThemeToggle'
 import { Modal } from '../components/shared/Modal'
+import { GroupGate } from '../components/groups/GroupGate'
+import { InviteModal } from '../components/groups/InviteLink'
+import { playDoorTransition } from '../components/shared/DoorTransition'
 import { useAppStore } from '../store/appStore'
 import { hashPin, formatCurrency, computeSplits, isParticipantDone, isSessionComplete } from '../services/calculations'
 import clsx from 'clsx'
@@ -33,12 +36,17 @@ function getAvatarStyle(user: User, allUsers: User[]) {
 
 export function AuthPage() {
   const navigate = useNavigate()
-  const { users, setCurrentUser, cloudReady, cloudSyncError, sessions, requirePin, showCompletedBills, billItems, selections, hydrateFromSupabase, hydrateBillItemsFromSupabase, hydrateSelectionsFromSupabase } = useAppStore()
+  const { users, setCurrentUser, cloudReady, cloudSyncError, sessions, requirePin, showCompletedBills, billItems, selections, hydrateFromSupabase, hydrateBillItemsFromSupabase, hydrateSelectionsFromSupabase, activeGroup, activeGroupId, legacyBypass, setActiveGroup } = useAppStore()
   const [step, setStep] = useState<Step>('profiles')
   const [role, setRole] = useState<Role>('user')
   const [selectedUserId, setSelectedUserId] = useState('')
   const [targetSessionId, setTargetSessionId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [inviteOpen, setInviteOpen] = useState(false)
+
+  // Gate first: no group entered (and not in the pre-migration classic space)
+  // means the landing page is the group entry, like signing into an account.
+  const atGate = !activeGroupId && !legacyBypass
 
   // Bill-picker modal state
   const [billPickerSession, setBillPickerSession] = useState<Session | null>(null)
@@ -61,23 +69,25 @@ export function AuthPage() {
 
   useEffect(() => () => window.clearTimeout(splitPopupTimerRef.current), [])
 
-  // Force-refresh all data every time the landing page is visible
+  // Force-refresh all data every time the landing page is visible,
+  // scoped to the active group so spaces never bleed into each other.
   useEffect(() => {
     let cancelled = false
     async function refresh() {
       try {
         const [freshUsers, freshSessions, freshItems, freshSelections] = await Promise.all([
-          dbGetUsers(), dbGetSessions(), dbGetAllBillItems(), dbGetAllSelections(),
+          dbGetUsers(activeGroupId), dbGetSessions(activeGroupId), dbGetAllBillItems(), dbGetAllSelections(),
         ])
         if (cancelled) return
+        const sessionIds = new Set(freshSessions.map((s) => s.id))
         hydrateFromSupabase(freshUsers, freshSessions)
-        hydrateBillItemsFromSupabase(freshItems)
-        hydrateSelectionsFromSupabase(freshSelections)
+        hydrateBillItemsFromSupabase(freshItems.filter((item) => sessionIds.has(item.sessionId)))
+        hydrateSelectionsFromSupabase(freshSelections.filter((sel) => sessionIds.has(sel.sessionId)))
       } catch { /* polling in useSupabaseInit will catch it */ }
     }
     refresh()
     return () => { cancelled = true }
-  }, [])
+  }, [activeGroupId])
 
   const regularUsers = users.filter((u) => u.role === 'user')
   const adminUsers = users.filter((u) => u.role === 'admin')
@@ -96,7 +106,7 @@ export function AuthPage() {
   })
 
   const openAdminAccess = () => {
-    if (!cloudReady || cloudSyncError) return
+    if (atGate || !cloudReady || cloudSyncError) return
     setRole('admin')
     setSelectedUserId(adminUsers[0]?.id ?? '')
     setTargetSessionId(null)
@@ -104,9 +114,16 @@ export function AuthPage() {
     setStep('pin')
   }
 
+  const switchGroup = () => {
+    playDoorTransition(() => {
+      setActiveGroup(null)
+      setStep('profiles')
+    })
+  }
+
   const loginUser = (user: User, sessionId: string | null = null) => {
     setCurrentUser(user)
-    navigate(sessionId ? `/session/${sessionId}` : '/user')
+    playDoorTransition(() => navigate(sessionId ? `/session/${sessionId}` : '/user'))
   }
 
   const selectMember = (userId: string, sessionId: string | null = null) => {
@@ -129,7 +146,11 @@ export function AuthPage() {
 
     if (role === 'admin') {
       const admin = adminUsers.find((u) => u.pin === hashedPin)
-      if (admin) { setCurrentUser(admin); navigate('/admin'); return }
+      if (admin) {
+        setCurrentUser(admin)
+        playDoorTransition(() => navigate('/admin'))
+        return
+      }
       setError('Incorrect admin PIN')
       return
     }
@@ -158,11 +179,47 @@ export function AuthPage() {
       </div>
 
       <main className="flex min-h-0 w-full flex-1 items-start justify-center overflow-y-auto py-6 sm:py-10">
-        {step === 'profiles' ? (
+        {atGate ? (
+          <GroupGate />
+        ) : step === 'profiles' ? (
           <div className="w-full max-w-4xl text-center animate-fade-in">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary mb-3">Shared moments. Fair splits.</p>
-            <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight text-fg">Who&apos;s in the mix?</h1>
-            <p className="text-sm sm:text-base text-fg-subtle mt-3">Claim yours &amp; Join the tally</p>
+            {activeGroup ? (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary mb-3">Shared moments. Fair splits.</p>
+                <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight text-fg">{activeGroup.name}</h1>
+                <p className="text-sm sm:text-base text-fg-subtle mt-3">Tap your profile to continue</p>
+
+                {/* In-group actions — invite lives here, inside the group */}
+                <div className="mt-5 flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => setInviteOpen(true)}
+                    className="flex min-h-9 items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary transition-[border-color,background-color,transform] duration-150 hover:border-primary/60 hover:bg-primary/15 active:scale-[0.97]"
+                  >
+                    <UserRoundPlus size={13} />
+                    Invite · <span className="font-mono tracking-wider">{activeGroup.inviteCode.toUpperCase()}</span>
+                  </button>
+                  <button
+                    onClick={switchGroup}
+                    className="flex min-h-9 items-center gap-1.5 rounded-full border border-line bg-surface px-4 py-1.5 text-xs font-medium text-fg-muted transition-[border-color,color,transform] duration-150 hover:border-line-strong hover:text-fg active:scale-[0.97]"
+                  >
+                    <DoorOpen size={13} />
+                    Switch group
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary mb-3">Shared moments. Fair splits.</p>
+                <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight text-fg">Who&apos;s in the mix?</h1>
+                <p className="text-sm sm:text-base text-fg-subtle mt-3">Claim yours &amp; Join the tally</p>
+                <button
+                  onClick={() => playDoorTransition(() => useAppStore.getState().setLegacyBypass(false))}
+                  className="mx-auto mt-4 flex min-h-9 items-center gap-1.5 rounded-full border border-line bg-surface px-4 py-1.5 text-xs font-medium text-fg-muted transition-[border-color,color,transform] duration-150 hover:border-primary/40 hover:text-fg active:scale-[0.97]"
+                >
+                  <DoorOpen size={13} /> Enter a group
+                </button>
+              </>
+            )}
 
             {!cloudReady ? (
               <div className="mt-12 flex items-center justify-center gap-2 text-sm text-fg-subtle">
@@ -191,8 +248,22 @@ export function AuthPage() {
             ) : (
               <div className="mt-12 mx-auto max-w-sm rounded-3xl border border-line bg-surface px-6 py-10 shadow-card">
                 <UserRound size={28} className="text-fg-faint mx-auto mb-3" />
-                <p className="text-sm text-fg-muted">No member profiles yet</p>
-                <p className="text-xs text-fg-faint mt-1">An admin can add members from the dashboard.</p>
+                <p className="text-sm text-fg-muted">
+                  {activeGroup ? `No members in ${activeGroup.name} yet` : 'No member profiles yet'}
+                </p>
+                <p className="text-xs text-fg-faint mt-1">
+                  {activeGroup
+                    ? 'Share the invite link so people can join.'
+                    : 'An admin can add members from the dashboard.'}
+                </p>
+                {activeGroup && (
+                  <button
+                    onClick={() => setInviteOpen(true)}
+                    className="mt-4 min-h-11 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+                  >
+                    Get the invite link
+                  </button>
+                )}
               </div>
             )}
 
@@ -323,6 +394,10 @@ export function AuthPage() {
           selections={selections.filter((s) => s.sessionId === splitPopup.session.id)}
           onClose={closeSplitPopup}
         />
+      )}
+
+      {activeGroup && (
+        <InviteModal group={activeGroup} open={inviteOpen} onClose={() => setInviteOpen(false)} />
       )}
     </div>
   )

@@ -1,5 +1,10 @@
 import type { ParsedBill } from '../types'
 
+/**
+ * Renders a clean, receipt-style bill image from parsed data.
+ * Also used to re-render the stored bill whenever items are edited after
+ * upload, so the shared "original bill" always matches the live items.
+ */
 export function renderCleanBillImage(bill: ParsedBill): string {
   const canvas = document.createElement('canvas')
   const W = 640
@@ -7,8 +12,18 @@ export function renderCleanBillImage(bill: ParsedBill): string {
   const LINE = 30
   const HEADER_H = 110
   const TABLE_HEADER_H = 50
+
+  // Anything on the printed bill beyond items + GST (staff charge, rounding…)
+  const chargesBase = bill.subtotal + bill.cgst + bill.sgst
+  const otherCharges = bill.totalAmount > 0
+    ? Math.round((bill.totalAmount - chargesBase) * 100) / 100
+    : 0
+  const showOtherCharges = otherCharges > 0.009
+  const grandTotal = bill.totalAmount > 0 ? bill.totalAmount : chargesBase
+
   const ITEMS_H = bill.items.length * LINE
-  const FOOTER_H = (2 + (bill.cgst > 0 ? 1 : 0) + (bill.sgst > 0 ? 1 : 0)) * LINE + 20
+  const footerRows = 2 + (bill.cgst > 0 ? 1 : 0) + (bill.sgst > 0 ? 1 : 0) + (showOtherCharges ? 1 : 0)
+  const FOOTER_H = footerRows * LINE + 20
   canvas.width = W
   canvas.height = HEADER_H + TABLE_HEADER_H + ITEMS_H + FOOTER_H + PAD * 2
 
@@ -87,8 +102,9 @@ export function renderCleanBillImage(bill: ParsedBill): string {
   row('Subtotal', bill.subtotal)
   if (bill.cgst > 0) row('CGST', bill.cgst)
   if (bill.sgst > 0) row('SGST', bill.sgst)
+  if (showOtherCharges) row('Other charges', otherCharges)
   ctx.fillRect(PAD, y - LINE / 2, W - PAD * 2, 1)
-  row('Grand Total', bill.totalAmount, true)
+  row('Grand Total', grandTotal, true)
 
   return canvas.toDataURL('image/png')
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useSessionSync } from '../hooks/useSessionSync'
 import {
@@ -15,14 +15,40 @@ import {
   getFixedBillTotal, getSessionCompletionState, isBillSummaryItemName,
   isParticipantDone, isPortionFullyAllocated,
 } from '../services/calculations'
+import { playDoorTransition } from '../components/shared/DoorTransition'
 import { toast } from '../components/shared/Toast'
 import { Modal } from '../components/shared/Modal'
 import { dbGetBillImageUrl } from '../lib/db'
 import { downloadSplitImage, downloadSplitPdf } from '../services/splitExport'
+import { queueFormattedBillImageSync } from '../services/billImageSync'
+import { useCountUp } from '../hooks/useCountUp'
 import clsx from 'clsx'
 
 type Tab = 'items' | 'split' | 'people'
 type BillEditorDraft = { name: string; quantity: string; totalPrice: string }
+
+/** Currency figure that counts up to its value on reveal/change. */
+function AnimatedCurrency({ value, className }: { value: number; className?: string }) {
+  const display = useCountUp(value)
+  return <span className={className}>{formatCurrency(display)}</span>
+}
+
+/** Checkmark that draws itself in — the lock-in success moment. */
+function DrawnCheck({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 12.5l5 5L20 6.5"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        pathLength={100}
+        className="anim-check-draw"
+      />
+    </svg>
+  )
+}
 
 export function SessionPage() {
   const { id } = useParams<{ id: string }>()
@@ -58,6 +84,13 @@ export function SessionPage() {
   const session = sessions.find((s) => s.id === id)
   const isAdmin = currentUser?.role === 'admin'
   const isCreator = !isAdmin && session?.createdBy === currentUser?.id
+
+  // Whenever a regenerated bill image lands (locally or via realtime), drop the
+  // cached signed URL so the next view fetches the fresh render.
+  const liveBillImageUrl = session?.billImageUrl
+  useEffect(() => {
+    setBillImageSrc('')
+  }, [liveBillImageUrl])
 
   if (!session && !cloudReady) return (
     <Layout>
@@ -186,6 +219,7 @@ export function SessionPage() {
       })
 
       await Promise.all(updates)
+      queueFormattedBillImageSync(session.id)
       toast.success('Uploaded bill contents updated')
       setShowBillEditor(false)
     } catch {
@@ -216,6 +250,7 @@ export function SessionPage() {
       }))
       setNewItemName('')
       setNewItemPrice('')
+      queueFormattedBillImageSync(session.id)
       toast.success('Item added to uploaded bill')
     } catch {
       toast.error('Item could not be added')
@@ -230,6 +265,7 @@ export function SessionPage() {
         delete next[itemId]
         return next
       })
+      queueFormattedBillImageSync(session.id)
       toast.info('Item removed from uploaded bill')
     } catch {
       toast.error('Item could not be removed')
@@ -324,7 +360,8 @@ export function SessionPage() {
     try {
       await lockUserSelections(session.id, viewingUserId)
       setLockSuccess(true)
-      window.setTimeout(() => navigate('/user'), 650)
+      // Let the check finish drawing, then exit through the doors.
+      window.setTimeout(() => playDoorTransition(() => navigate('/user')), 750)
     } catch {
       toast.error('Selections could not be locked')
       setLocking(false)
@@ -724,9 +761,10 @@ export function SessionPage() {
                             {isMe ? `You (${s.userName})` : s.userName}
                           </span>
                         </div>
-                        <span className={clsx('text-lg font-bold', isMe ? 'text-primary' : 'text-fg')}>
-                          {formatCurrency(s.grandTotal)}
-                        </span>
+                        <AnimatedCurrency
+                          value={s.grandTotal}
+                          className={clsx('text-lg font-bold tabular-nums', isMe ? 'text-primary' : 'text-fg')}
+                        />
                       </div>
                       <div className="space-y-1 pt-1 border-t border-line/50">
                         {s.itemBreakdown.map(({ item, portionPercentage, amount }) => (
@@ -930,7 +968,7 @@ export function SessionPage() {
               )}
             >
               {lockSuccess
-                ? <><CheckCircle size={16} /> Locked</>
+                ? <><DrawnCheck size={17} /> Locked in</>
                 : hasPendingSelections
                   ? <><Loader2 size={16} className="animate-spin" /> Saving selections…</>
                 : locking
@@ -946,9 +984,10 @@ export function SessionPage() {
         <div className="shrink-0 border-t border-line bg-canvas/95 backdrop-blur-sm px-4 py-4 pb-safe">
           <div className="flex items-center justify-between">
             <span className="text-sm text-fg-muted">Your total</span>
-            <span key={splits.find((s) => s.userId === viewingUserId)?.grandTotal} className="text-xl font-bold text-primary animate-pop">
-              {formatCurrency(splits.find((s) => s.userId === viewingUserId)?.grandTotal ?? 0)}
-            </span>
+            <AnimatedCurrency
+              value={splits.find((s) => s.userId === viewingUserId)?.grandTotal ?? 0}
+              className="text-xl font-bold text-primary tabular-nums anim-num-settle"
+            />
           </div>
         </div>
       )}

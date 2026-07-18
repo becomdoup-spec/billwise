@@ -298,6 +298,14 @@
     color-scheme: light;
   }
 
+  :root {
+    /* Motion vocabulary — one physical language across the app */
+    --ease-smooth: cubic-bezier(0.32, 0.72, 0, 1);      /* decisive glide */
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);   /* playful overshoot */
+    --ease-door:   cubic-bezier(0.76, 0, 0.24, 1);      /* heavy, mechanical */
+    --ease-exit:   cubic-bezier(0.4, 0, 1, 1);          /* quick leave */
+  }
+
   * {
     -webkit-tap-highlight-color: transparent;
     box-sizing: border-box;
@@ -388,6 +396,14 @@
   .pb-safe {
     padding-bottom: max(env(safe-area-inset-bottom, 16px), 16px);
   }
+
+  /* iOS zooms the page when a focused input renders under 16px.
+     Keep the design's compact look on desktop, bump to 16px on touch. */
+  @media (pointer: coarse) {
+    input, select, textarea {
+      font-size: max(16px, 1em);
+    }
+  }
 }
 
 /* ── Custom range slider ──────────────────────────── */
@@ -463,11 +479,109 @@ input[type='range'].slider-brand::-moz-range-thumb {
 
   /* Page-level entrance — applied to top-level route wrappers */
   .page-enter {
-    animation: pageEnter 0.2s cubic-bezier(0.32, 0.72, 0, 1) both;
+    animation: pageEnter 0.34s var(--ease-smooth) both;
     height: 100%;
     min-height: 0;
     will-change: opacity, transform;
   }
+
+  /* ── Door transition (auth → dashboard signature moment) ── */
+  .door-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 95;
+    pointer-events: all;
+    overflow: hidden;
+  }
+  .door-panel {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 51%; /* slight center overlap hides any sub-pixel seam */
+    overflow: hidden;
+    /* Use the deepest surface tones so panels clearly separate from the page
+       in light themes too (raised/surface are near-white there). */
+    background:
+      linear-gradient(165deg,
+        rgb(var(--surface-overlay)) 0%,
+        rgb(var(--surface-hover)) 55%,
+        rgb(var(--surface-overlay)) 100%);
+  }
+  /* Brand glow hugging the seam — reads on white and black alike */
+  .door-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(42% 58% at var(--seam-x) 50%,
+      rgb(var(--primary) / 0.24), transparent 70%);
+  }
+  /* Crisp glowing seam edge */
+  .door-panel::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg,
+      rgb(var(--primary) / 0.15),
+      rgb(var(--primary) / 0.85) 25%,
+      rgb(var(--primary) / 0.85) 75%,
+      rgb(var(--primary) / 0.15));
+    box-shadow: 0 0 22px 3px rgb(var(--primary) / 0.45);
+  }
+  .door-panel--left {
+    left: 0;
+    --seam-x: 100%;
+    box-shadow: inset -40px 0 64px -30px rgb(var(--shadow) / 0.5);
+  }
+  .door-panel--left::after { right: 0; }
+  .door-panel--right {
+    right: 0;
+    --seam-x: 0%;
+    box-shadow: inset 40px 0 64px -30px rgb(var(--shadow) / 0.5);
+  }
+  .door-panel--right::after { left: 0; }
+  .door-overlay[data-phase='cover'] .door-panel--left  { animation: doorCoverL 0.26s var(--ease-smooth) both; }
+  .door-overlay[data-phase='cover'] .door-panel--right { animation: doorCoverR 0.26s var(--ease-smooth) both; }
+  .door-overlay[data-phase='hold'] .door-panel--left   { transform: translateX(0); }
+  .door-overlay[data-phase='hold'] .door-panel--right  { transform: translateX(0); }
+  .door-overlay[data-phase='open'] { pointer-events: none; }
+  .door-overlay[data-phase='open'] .door-panel--left   { animation: doorOpenL 0.56s var(--ease-door) both; }
+  .door-overlay[data-phase='open'] .door-panel--right  { animation: doorOpenR 0.56s var(--ease-door) both; }
+  .door-seal {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 2;
+    transform: translate(-50%, -50%);
+    animation: doorSealIn 0.3s var(--ease-spring) both;
+    /* Canvas-coloured ring lifts the medallion off the panels in every theme */
+    border-radius: 1.375rem;
+    box-shadow: 0 0 0 7px rgb(var(--canvas) / 0.95), 0 18px 44px -10px rgb(var(--shadow) / 0.45);
+  }
+  .door-overlay[data-phase='open'] .door-seal { animation: doorSealOut 0.24s var(--ease-exit) both; }
+
+  /* ── Success check draw (SVG path with pathLength=100) ── */
+  .anim-check-draw {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: checkDraw 0.45s var(--ease-smooth) forwards 0.1s;
+  }
+
+  /* PIN dot fill pop */
+  .anim-dot-pop { animation: dotPop 0.28s var(--ease-spring) both; }
+
+  /* Progress step reveal (AI pipeline, session creation) */
+  .anim-step-in { animation: stepIn 0.32s var(--ease-smooth) both; }
+
+  /* Number settle after count-up */
+  .anim-num-settle { animation: numSettle 0.4s var(--ease-spring) both; }
+
+  /* Soft attention pulse ring (active progress step) */
+  .anim-ring-pulse { animation: ringPulse 1.6s ease-in-out infinite; }
+
+  /* Page stack thumbnails (multi-photo bill upload) */
+  .anim-page-in { animation: pageCardIn 0.34s var(--ease-spring) both; }
 
   /* Card hover lift — subtle, premium */
   .card-lift {
@@ -586,8 +700,56 @@ input[type='range'].slider-brand::-moz-range-thumb {
   100% { opacity: 1; transform: scale(1); }
 }
 @keyframes pageEnter {
-  0%   { opacity: 0; transform: translateY(8px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0%   { opacity: 0; transform: translateY(12px) scale(0.992); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes doorCoverL {
+  0%   { transform: translateX(-101%); }
+  100% { transform: translateX(0); }
+}
+@keyframes doorCoverR {
+  0%   { transform: translateX(101%); }
+  100% { transform: translateX(0); }
+}
+@keyframes doorOpenL {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-101%); }
+}
+@keyframes doorOpenR {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(101%); }
+}
+@keyframes doorSealIn {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes doorSealOut {
+  0%   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); }
+}
+@keyframes checkDraw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes dotPop {
+  0%   { transform: scale(0.4); }
+  60%  { transform: scale(1.35); }
+  100% { transform: scale(1.1); }
+}
+@keyframes stepIn {
+  0%   { opacity: 0; transform: translateX(-8px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes numSettle {
+  0%   { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@keyframes ringPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--primary) / 0.35); }
+  50%      { box-shadow: 0 0 0 6px rgb(var(--primary) / 0); }
+}
+@keyframes pageCardIn {
+  0%   { opacity: 0; transform: translateY(10px) scale(0.9) rotate(-1.5deg); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
 }
 @keyframes menuIn {
   0% { opacity: 0; transform: translateY(-4px) scale(0.98); }
@@ -612,6 +774,12 @@ input[type='range'].slider-brand::-moz-range-thumb {
 @keyframes nodePulse {
   0%, 100% { opacity: 0.12; }
   50%       { opacity: 0.28; }
+}
+
+@keyframes scanSweep {
+  0%   { top: -20%; }
+  55%  { top: 100%; }
+  100% { top: 100%; }
 }
 
 @keyframes hourglass-flip {

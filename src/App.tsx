@@ -5,7 +5,9 @@ import { AdminDashboard } from './pages/AdminDashboard'
 import { NewSessionPage } from './pages/NewSessionPage'
 import { SessionPage } from './pages/SessionPage'
 import { UserDashboard } from './pages/UserDashboard'
+import { JoinGroupPage } from './pages/JoinGroupPage'
 import { ToastContainer } from './components/shared/Toast'
+import { DoorTransitionOverlay } from './components/shared/DoorTransition'
 import { useAppStore } from './store/appStore'
 import { useSupabaseInit } from './hooks/useSupabaseInit'
 
@@ -23,6 +25,7 @@ function AnimatedRoutes() {
   return (
     <Routes location={location} key={location.pathname}>
       <Route path="/" element={<div className="page-enter"><AuthPage /></div>} />
+      <Route path="/join/:code" element={<div className="page-enter"><JoinGroupPage /></div>} />
       <Route
         path="/admin"
         element={
@@ -73,6 +76,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AnimatedRoutes />
+      <DoorTransitionOverlay />
       <ToastContainer />
       <Analytics />
     </BrowserRouter>

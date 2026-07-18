@@ -2,29 +2,31 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Image, AlertCircle, CheckCircle, Plus, Trash2,
   Sparkles, FileText, PencilLine, X, Info, Copy, Check,
+  ScanLine, Calculator, ArrowUp, ArrowDown, ImagePlus, Layers,
 } from 'lucide-react'
 import type { ParsedBill } from '../../types'
 import { emptyParsedBill } from '../../services/billParser'
 import { BILL_AI_FORMAT_PROMPT, parseBillWithClaude, type AiProgress } from '../../services/claudeBillParser'
 import { renderCleanBillImage } from '../../services/billImageRenderer'
-import { formatCurrency, isBillSummaryItemName } from '../../services/calculations'
+import { stitchImagesVertically } from '../../services/imageStitcher'
+import { formatCurrency, isBillSummaryItemName, generateId } from '../../services/calculations'
 import clsx from 'clsx'
 
-// Animated hourglass SVG icon
-function HourglassIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} style={{ animation: 'hourglass-flip 2s ease-in-out infinite' }}>
-      <path d="M5 2h14M5 22h14M7 2v5l5 5-5 5v5M17 2v5l-5 5 5 5v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
+export type BillImageKind = 'formatted' | 'photo'
 
 interface BillUploadProps {
-  onParsed: (bill: ParsedBill, imageDataUrl?: string) => void
+  onParsed: (bill: ParsedBill, imageDataUrl?: string, imageKind?: BillImageKind) => void
+}
+
+interface BillPage {
+  id: string
+  dataUrl: string
+  base64: string
+  mediaType: string
 }
 
 type UploadMode = null | 'ai' | 'formatted' | 'manual'
-type UploadState = 'idle' | 'format-info' | 'processing' | 'done' | 'error'
+type UploadState = 'idle' | 'format-info' | 'pages' | 'processing' | 'done' | 'error'
 type CopyStatus = 'idle' | 'copied' | 'error'
 
 const FORMAT_STRUCTURE = `MERCHANT / RESTAURANT NAME
@@ -38,18 +40,29 @@ CGST | printed value, or 0.00
 SGST | printed value, or 0.00
 Grand Total | printed value`
 
+// Progress checkpoints for the AI pipeline timeline
+const AI_STEPS = [
+  { at: 0, label: 'Preparing photos', icon: Image },
+  { at: 22, label: 'Reading the bill', icon: ScanLine },
+  { at: 55, label: 'Extracting items & prices', icon: FileText },
+  { at: 84, label: 'Validating totals', icon: Calculator },
+  { at: 94, label: 'Rendering clean bill', icon: Sparkles },
+]
+
 export function BillUpload({ onParsed }: BillUploadProps) {
   const [mode, setMode] = useState<UploadMode>(null)
   const [state, setState] = useState<UploadState>('idle')
+  const [pages, setPages] = useState<BillPage[]>([])
   const [progressLabel, setProgressLabel] = useState('')
   const [progressPct, setProgressPct] = useState(0)
   const [displayPct, setDisplayPct] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
   const [promptCopyStatus, setPromptCopyStatus] = useState<CopyStatus>('idle')
   const [preview, setPreview] = useState<string>('')
-  const [, setParsed] = useState<ParsedBill | null>(null)
+  const [previewKind, setPreviewKind] = useState<BillImageKind>('photo')
   const [editBill, setEditBill] = useState<ParsedBill>(emptyParsedBill())
   const fileRef = useRef<HTMLInputElement>(null)
+  const addMoreRef = useRef<HTMLInputElement>(null)
   const targetPctRef = useRef(0)
   const animFrameRef = useRef<number>(0)
   const promptCopyTimerRef = useRef<number>(0)
@@ -79,8 +92,8 @@ export function BillUpload({ onParsed }: BillUploadProps) {
   const resetToModeSelect = () => {
     setMode(null)
     setState('idle')
+    setPages([])
     setPreview('')
-    setParsed(null)
     setErrorMsg('')
     setPromptCopyStatus('idle')
     setProgressPct(0)
@@ -89,16 +102,16 @@ export function BillUpload({ onParsed }: BillUploadProps) {
 
   const validateFile = (file: File): string | null => {
     if (!file.type.startsWith('image/')) return 'Please upload an image file (JPG, PNG, WebP, HEIC)'
-    if (file.size > 15 * 1024 * 1024) return 'Image must be under 15 MB'
+    if (file.size > 15 * 1024 * 1024) return 'Each image must be under 15 MB'
     return null
   }
 
-  const readFileAsDataUrl = (file: File): Promise<{ dataUrl: string; base64: string; mediaType: string }> =>
+  const readFileAsPage = (file: File): Promise<BillPage> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string
-        resolve({ dataUrl, base64: dataUrl.split(',')[1], mediaType: file.type })
+        resolve({ id: generateId(), dataUrl, base64: dataUrl.split(',')[1], mediaType: file.type })
       }
       reader.onerror = reject
       reader.readAsDataURL(file)
@@ -116,29 +129,73 @@ export function BillUpload({ onParsed }: BillUploadProps) {
     promptCopyTimerRef.current = window.setTimeout(() => setPromptCopyStatus('idle'), 2200)
   }, [])
 
-  // ── AI mode file handler ─────────────────────────────────
-  const processWithAI = useCallback(async (file: File, renderClean = true) => {
-    const err = validateFile(file)
-    if (err) { setErrorMsg(err); setState('error'); return }
+  // ── page collection ──────────────────────────────────────
+  const addFiles = useCallback(async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList)
+    if (files.length === 0) return
+    for (const file of files) {
+      const err = validateFile(file)
+      if (err) { setErrorMsg(err); setState('error'); return }
+    }
+    try {
+      const newPages = await Promise.all(files.map(readFileAsPage))
+      setErrorMsg('')
+      setPages((prev) => [...prev, ...newPages])
+      setState('pages')
+    } catch {
+      setErrorMsg('The photo could not be read. Try a different image.')
+      setState('error')
+    }
+  }, [])
 
-    const { dataUrl, base64, mediaType } = await readFileAsDataUrl(file)
-    setPreview(dataUrl)
+  const removePage = (id: string) => {
+    setPages((prev) => {
+      const next = prev.filter((p) => p.id !== id)
+      if (next.length === 0) setState('idle')
+      return next
+    })
+  }
+
+  const movePage = (idx: number, dir: -1 | 1) => {
+    setPages((prev) => {
+      const target = idx + dir
+      if (target < 0 || target >= prev.length) return prev
+      const next = [...prev]
+      ;[next[idx], next[target]] = [next[target], next[idx]]
+      return next
+    })
+  }
+
+  // ── AI processing (single or multi-photo) ────────────────
+  const processPages = useCallback(async (pagesToProcess: BillPage[], renderClean: boolean) => {
+    if (pagesToProcess.length === 0) return
     setState('processing')
-    setProgressLabel('Preparing image…')
+    setProgressLabel(pagesToProcess.length > 1 ? `Combining ${pagesToProcess.length} photos…` : 'Preparing photo…')
     setProgressPct(5)
 
     try {
-      const result = await parseBillWithClaude(base64, mediaType, (p: AiProgress) => {
-        setProgressLabel(p.status)
-        setProgressPct(Math.round(p.progress * 100))
-      })
+      const [result, stitched] = await Promise.all([
+        parseBillWithClaude(
+          pagesToProcess.map(({ base64, mediaType }) => ({ base64, mediaType })),
+          (p: AiProgress) => {
+            setProgressLabel(p.status)
+            setProgressPct(Math.round(p.progress * 100))
+          },
+        ),
+        stitchImagesVertically(pagesToProcess.map((p) => p.dataUrl)),
+      ])
 
       setProgressLabel(renderClean ? 'Rendering clean bill image…' : 'Finalising formatted bill…')
-      setProgressPct(95)
+      setProgressPct(96)
 
-      setParsed(result)
       setEditBill(result)
-      setPreview(renderClean ? renderCleanBillImage(result) : dataUrl)
+      if (renderClean) {
+        setPreview(renderCleanBillImage(result))
+        setPreviewKind('formatted')
+      } else {
+        setPreview(stitched)
+        setPreviewKind('photo')
+      }
       setState('done')
     } catch (e) {
       setErrorMsg((e as Error).message ?? 'AI processing failed. Try another option.')
@@ -147,19 +204,16 @@ export function BillUpload({ onParsed }: BillUploadProps) {
   }, [])
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    void addFiles(files)
     e.target.value = ''
-    if (mode === 'ai') processWithAI(file)
-    else if (mode === 'formatted') processWithAI(file, false)
   }
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
-    const file = e.dataTransfer.files[0]
-    if (!file) return
-    if (mode === 'ai') processWithAI(file)
-    else if (mode === 'formatted') processWithAI(file, false)
+    if (e.dataTransfer.files.length === 0) return
+    void addFiles(e.dataTransfer.files)
   }
 
   // ── Item editing helpers ─────────────────────────────────
@@ -200,7 +254,10 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         ? editBill.totalAmount
         : Math.round((subtotal + editBill.cgst + editBill.sgst) * 100) / 100,
     }
-    onParsed(final, preview || undefined)
+    // The AI-mode preview is a rendered image; regenerate it so manual
+    // corrections made in this review step are baked into the shared bill.
+    const finalPreview = mode === 'ai' ? renderCleanBillImage(final) : preview
+    onParsed(final, finalPreview || undefined, previewKind)
   }
 
   // ════════════════════════════════════════════════════════
@@ -208,13 +265,13 @@ export function BillUpload({ onParsed }: BillUploadProps) {
   // ════════════════════════════════════════════════════════
   if (mode === null) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-3 animate-list">
         <p className="text-xs text-fg-subtle">Choose how you'd like to add your bill</p>
 
         {/* Option 1 — AI */}
         <button
           onClick={() => { setMode('ai'); setState('idle') }}
-          className="group relative flex w-full items-start gap-4 overflow-hidden rounded-2xl border border-primary/35 bg-primary/[0.08] px-4 py-4 text-left shadow-glow transition-[background-color,border-color,transform] duration-150 hover:border-primary/60 hover:bg-primary/[0.12]"
+          className="group relative flex w-full items-start gap-4 overflow-hidden rounded-2xl border border-primary/35 bg-primary/[0.08] px-4 py-4 text-left shadow-glow transition-[background-color,border-color,transform] duration-150 hover:border-primary/60 hover:bg-primary/[0.12] active:scale-[0.99]"
         >
           <span className="absolute right-3 top-3 rounded-full border border-primary/30 bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
             Recommended
@@ -225,7 +282,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           <div className="flex-1 min-w-0 pr-20">
             <p className="text-sm font-semibold text-fg">Upload &amp; format using AI</p>
             <p className="text-xs text-fg-subtle mt-0.5 leading-relaxed">
-              Upload any bill photo — AI reads it and generates a clean, formatted digital bill automatically.
+              Upload bill photos — long bills can span multiple photos, AI pieces them into one clean digital bill.
             </p>
           </div>
         </button>
@@ -233,7 +290,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         {/* Option 2 — Formatted */}
         <button
           onClick={() => { setMode('formatted'); setState('format-info') }}
-          className="group flex w-full items-start gap-4 rounded-2xl border border-line bg-surface px-4 py-4 text-left transition-[background-color,border-color,transform] duration-150 hover:border-primary/40 hover:bg-primary/5"
+          className="group flex w-full items-start gap-4 rounded-2xl border border-line bg-surface px-4 py-4 text-left transition-[background-color,border-color,transform] duration-150 hover:border-primary/40 hover:bg-primary/5 active:scale-[0.99]"
         >
           <div className="w-10 h-10 rounded-xl bg-surface-overlay border border-line flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-surface-raised transition-colors">
             <FileText size={18} className="text-fg-muted" />
@@ -249,13 +306,11 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         {/* Option 3 — Manual */}
         <button
           onClick={() => {
-            const empty = emptyParsedBill()
-            setParsed(empty)
-            setEditBill(empty)
+            setEditBill(emptyParsedBill())
             setMode('manual')
             setState('done')
           }}
-          className="group flex w-full items-start gap-4 rounded-2xl border border-line bg-surface px-4 py-4 text-left transition-[background-color,border-color,transform] duration-150 hover:border-primary/40 hover:bg-primary/5"
+          className="group flex w-full items-start gap-4 rounded-2xl border border-line bg-surface px-4 py-4 text-left transition-[background-color,border-color,transform] duration-150 hover:border-primary/40 hover:bg-primary/5 active:scale-[0.99]"
         >
           <div className="w-10 h-10 rounded-xl bg-surface-overlay border border-line flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-surface-raised transition-colors">
             <PencilLine size={18} className="text-fg-muted" />
@@ -322,7 +377,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           Got it — upload my bill →
         </button>
 
-        <input ref={fileRef} type="file" accept="image/*,.heic,.heif" className="hidden" onChange={onFileChange} />
+        <input ref={fileRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={onFileChange} />
       </div>
     )
   }
@@ -353,35 +408,33 @@ export function BillUpload({ onParsed }: BillUploadProps) {
           onDragOver={(e) => e.preventDefault()}
           onClick={() => fileRef.current?.click()}
           className={clsx(
-            'relative cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-[background-color,border-color,transform] duration-150',
+            'relative cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-[background-color,border-color,transform] duration-150 active:scale-[0.99]',
             state === 'error'
               ? 'border-danger/40 bg-danger/5'
               : 'border-line hover:border-primary/40 hover:bg-primary/5',
           )}
         >
-          <input ref={fileRef} type="file" accept="image/*,.heic,.heif" className="hidden" onChange={onFileChange} />
+          <input ref={fileRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={onFileChange} />
           <div className="flex flex-col items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-surface-overlay border border-line flex items-center justify-center">
               <Image size={22} className="text-fg-muted" />
             </div>
             <div>
-              <p className="text-sm font-medium text-fg">Drop bill image here</p>
+              <p className="text-sm font-medium text-fg">Drop bill photos here</p>
               <p className="text-xs text-fg-subtle mt-1">or tap to browse · JPG, PNG, WebP, HEIC</p>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 px-3 py-2 bg-surface border border-line rounded-xl">
-          <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+          <Layers size={13} className="text-primary shrink-0" />
           <p className="text-xs text-fg-subtle">
-            {isAI
-              ? 'AI reads and formats your bill into a clean digital version.'
-              : 'Uses the same AI formatter to validate quantities, prices, and wrapped lines.'}
+            Long bill? Add multiple photos (top part, bottom part) — they're pieced into one bill.
           </p>
         </div>
 
         {state === 'error' && (
-          <div className="flex items-start gap-3 bg-danger/10 border border-danger/20 rounded-xl p-4">
+          <div className="flex items-start gap-3 bg-danger/10 border border-danger/20 rounded-xl p-4 animate-slide-up">
             <AlertCircle size={16} className="text-danger shrink-0 mt-0.5" />
             <p className="text-sm text-danger">{errorMsg}</p>
           </div>
@@ -391,73 +444,181 @@ export function BillUpload({ onParsed }: BillUploadProps) {
   }
 
   // ════════════════════════════════════════════════════════
-  // ── PROCESSING ───────────────────────────────────────────
+  // ── PAGES REVIEW (before processing) ────────────────────
+  // ════════════════════════════════════════════════════════
+  if (state === 'pages') {
+    return (
+      <div className="space-y-4 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers size={15} className="text-primary" />
+            <span className="text-sm font-semibold text-fg">
+              {pages.length === 1 ? 'Your bill photo' : `${pages.length} photos · one bill`}
+            </span>
+          </div>
+          <button onClick={resetToModeSelect} className="text-fg-subtle hover:text-fg transition-colors" aria-label="Start over">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+          {pages.map((page, idx) => (
+            <div key={page.id} className="anim-page-in group relative overflow-hidden rounded-xl border border-line bg-surface" style={{ animationDelay: `${idx * 60}ms` }}>
+              <img src={page.dataUrl} alt={`Bill part ${idx + 1}`} className="h-28 w-full object-cover object-top" />
+              <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+                {idx + 1}
+              </span>
+              <button
+                type="button"
+                onClick={() => removePage(page.id)}
+                aria-label={`Remove photo ${idx + 1}`}
+                className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm transition-[background-color,transform] duration-150 hover:bg-danger active:scale-90"
+              >
+                <X size={12} />
+              </button>
+              {pages.length > 1 && (
+                <div className="absolute bottom-1.5 right-1.5 flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => movePage(idx, -1)}
+                    disabled={idx === 0}
+                    aria-label={`Move photo ${idx + 1} earlier`}
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm transition-transform duration-150 active:scale-90 disabled:opacity-30"
+                  >
+                    <ArrowUp size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => movePage(idx, 1)}
+                    disabled={idx === pages.length - 1}
+                    aria-label={`Move photo ${idx + 1} later`}
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm transition-transform duration-150 active:scale-90 disabled:opacity-30"
+                  >
+                    <ArrowDown size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Add another photo tile */}
+          <button
+            type="button"
+            onClick={() => addMoreRef.current?.click()}
+            className="flex h-28 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-line text-fg-subtle transition-[border-color,color,background-color,transform] duration-150 hover:border-primary/40 hover:bg-primary/5 hover:text-primary active:scale-[0.97]"
+          >
+            <ImagePlus size={18} />
+            <span className="text-[10px] font-medium">Add photo</span>
+          </button>
+          <input ref={addMoreRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={onFileChange} />
+        </div>
+
+        {pages.length > 1 && (
+          <div className="flex items-center gap-2 rounded-xl border border-info/20 bg-info/[0.07] px-3 py-2.5">
+            <Info size={13} className="text-info shrink-0" />
+            <p className="text-xs text-info">Keep photos in top-to-bottom bill order — use the arrows to rearrange.</p>
+          </div>
+        )}
+
+        <button
+          onClick={() => processPages(pages, mode === 'ai')}
+          className="btn-sheen flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-fg shadow-glow transition-[background-color,transform] duration-150 hover:bg-primary-hover active:scale-[0.98]"
+        >
+          <Sparkles size={15} />
+          {pages.length > 1 ? `Piece ${pages.length} photos into one bill →` : 'Read this bill →'}
+        </button>
+      </div>
+    )
+  }
+
+  // ════════════════════════════════════════════════════════
+  // ── PROCESSING — premium step timeline ──────────────────
   // ════════════════════════════════════════════════════════
   if (state === 'processing') {
     const pctRounded = Math.round(displayPct)
+    const activeStepIdx = AI_STEPS.reduce((acc, step, i) => (pctRounded >= step.at ? i : acc), 0)
     return (
-      <div className="flex flex-col items-center gap-5 py-8 animate-fade-in">
-        {/* Bill thumbnail + hourglass overlay */}
-        <div className="relative">
-          {preview ? (
-            <div className="w-24 h-24 rounded-xl overflow-hidden border border-line">
-              <img src={preview} alt="bill" className="w-full h-full object-cover object-top" />
-            </div>
-          ) : (
-            <div className="w-24 h-24 rounded-xl bg-surface-raised border border-line" />
-          )}
-          {/* Hourglass badge */}
-          <div className="absolute -bottom-3 -right-3 w-9 h-9 rounded-full bg-canvas border-2 border-primary/40 flex items-center justify-center shadow-lg">
-            <HourglassIcon className="w-5 h-5 text-primary" />
+      <div className="flex flex-col gap-6 py-6 animate-fade-in">
+        {/* Photo stack */}
+        <div className="relative mx-auto h-28 w-28">
+          {pages.slice(0, 3).map((page, i, arr) => {
+            const offset = arr.length - 1 - i
+            return (
+              <div
+                key={page.id}
+                className="absolute inset-0 overflow-hidden rounded-xl border border-line shadow-card"
+                style={{ transform: `translate(${offset * 6}px, ${offset * -6}px) rotate(${offset * 2.5}deg)`, zIndex: 10 - offset }}
+              >
+                <img src={page.dataUrl} alt="" className="h-full w-full object-cover object-top" />
+              </div>
+            )
+          })}
+          {/* Scan line sweep */}
+          <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-xl">
+            <div
+              className="absolute inset-x-0 h-10 bg-gradient-to-b from-transparent via-primary/35 to-transparent"
+              style={{ animation: 'scanSweep 1.8s ease-in-out infinite' }}
+            />
           </div>
         </div>
 
-        <div className="w-full space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-fg-muted font-medium truncate pr-2">
-              {progressLabel || 'Processing…'}
-            </span>
-            <span className="text-primary font-mono font-semibold shrink-0">{pctRounded}%</span>
-          </div>
-          {/* Progress bar with gradient shimmer */}
-          <div className="h-2 bg-surface-overlay rounded-full overflow-hidden">
+        {/* Step timeline */}
+        <div className="space-y-1">
+          {AI_STEPS.map((step, i) => {
+            const done = i < activeStepIdx
+            const active = i === activeStepIdx
+            const Icon = step.icon
+            return (
+              <div
+                key={step.label}
+                className={clsx(
+                  'anim-step-in flex items-center gap-3 rounded-xl px-3 py-2 transition-colors duration-300',
+                  active && 'bg-primary/[0.07]',
+                )}
+                style={{ animationDelay: `${i * 70}ms` }}
+              >
+                <div className={clsx(
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,color] duration-300',
+                  done
+                    ? 'border-success/40 bg-success/15 text-success'
+                    : active
+                      ? 'anim-ring-pulse border-primary/50 bg-primary/15 text-primary'
+                      : 'border-line bg-surface text-fg-faint',
+                )}>
+                  {done ? <Check size={13} strokeWidth={3} /> : <Icon size={13} />}
+                </div>
+                <span className={clsx(
+                  'flex-1 text-xs font-medium transition-colors duration-300',
+                  done ? 'text-fg-subtle line-through decoration-fg-faint/50' : active ? 'text-fg' : 'text-fg-faint',
+                )}>
+                  {step.label}
+                </span>
+                {active && (
+                  <span className="font-mono text-xs font-semibold text-primary tabular-nums">{pctRounded}%</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Progress bar */}
+        <div className="space-y-1.5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-overlay">
             <div
-              className="h-full rounded-full relative overflow-hidden"
-              style={{
-                width: `${displayPct}%`,
-                background: 'linear-gradient(90deg, var(--color-primary) 0%, color-mix(in srgb, var(--color-primary) 70%, white) 100%)',
-                transition: 'width 0.05s linear',
-              }}
+              className="relative h-full overflow-hidden rounded-full bg-primary"
+              style={{ width: `${displayPct}%`, transition: 'width 0.05s linear' }}
             >
-              {/* Shimmer sweep */}
               <span
                 className="absolute inset-0 opacity-40"
                 style={{
-                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.5) 50%, transparent 100%)',
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)',
                   animation: 'shimmer 1.4s infinite',
                 }}
               />
             </div>
           </div>
-          {/* Step dots */}
-          <div className="flex justify-between px-0.5 mt-1">
-            {[0, 25, 50, 75, 100].map((mark) => (
-              <div
-                key={mark}
-                className={clsx(
-                  'w-1 h-1 rounded-full transition-[background-color,transform,opacity] duration-300',
-                  pctRounded >= mark ? 'bg-primary' : 'bg-surface-overlay',
-                )}
-              />
-            ))}
-          </div>
+          <p className="text-center text-[11px] text-fg-faint">{progressLabel || 'Processing…'}</p>
         </div>
-
-        <p className="text-xs text-fg-faint text-center leading-relaxed">
-          {mode === 'ai'
-            ? 'AI is reading and formatting your bill…'
-            : 'AI is validating the formatted bill and merging wrapped rows…'}
-        </p>
       </div>
     )
   }
@@ -477,7 +638,9 @@ export function BillUpload({ onParsed }: BillUploadProps) {
         <div className="flex items-center gap-2">
           <CheckCircle size={16} className="text-success" />
           <span className="text-sm font-medium text-fg">
-            {mode === 'ai' ? 'AI formatted bill' : mode === 'formatted' ? 'AI parsed bill' : 'Manual entry'}
+            {mode === 'ai'
+              ? pages.length > 1 ? `AI formatted bill · ${pages.length} photos pieced` : 'AI formatted bill'
+              : mode === 'formatted' ? 'AI parsed bill' : 'Manual entry'}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -494,7 +657,7 @@ export function BillUpload({ onParsed }: BillUploadProps) {
 
       {/* Preview — show clean image for AI mode */}
       {preview && mode === 'ai' && (
-        <div className="w-full rounded-xl overflow-hidden border border-line bg-white">
+        <div className="w-full rounded-xl overflow-hidden border border-line bg-white animate-slide-up">
           <img src={preview} alt="AI-generated clean bill" className="w-full object-contain" />
         </div>
       )}

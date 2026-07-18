@@ -40,16 +40,25 @@ Rules:
 - Never output fake rows with QTY 1 and UNIT PRICE/AMOUNT 0.00; those lines are either continuation text or should be ignored
 - Prefer fewer complete rows over extra broken rows
 - If the image shows "Premise (3x1ea) - 3400 - 10200", return "Premise | 3 | 3400.00 | 10200.00"
-- If the image shows an item name on one line and its continuation/description on the next line, return one merged item row only`
+- If the image shows an item name on one line and its continuation/description on the next line, return one merged item row only
+- If MULTIPLE photos are provided, they are sequential parts (top to bottom) of ONE single bill — never separate bills
+- Merge all photos into one continuous item list in reading order
+- If the photos overlap (the same rows visible at the bottom of one photo and the top of the next), include each duplicated row exactly once
+- Take Subtotal, CGST, SGST, and Grand Total from whichever photo shows them (usually the last one)`
+
+export interface BillImageInput {
+  base64: string
+  mediaType: string
+}
 
 /**
- * Parse a receipt image using OpenRouter (free tier).
+ * Parse one bill from one or more photos using OpenRouter (free tier).
+ * Multiple photos are treated as sequential parts of the same bill.
  * Requires VITE_OPENROUTER_API_KEY in .env
  * Get a free key at https://openrouter.ai/keys
  */
 export async function parseBillWithClaude(
-  imageBase64: string,
-  mediaType: string,
+  images: BillImageInput | BillImageInput[],
   onProgress?: (p: AiProgress) => void,
 ): Promise<ParsedBill> {
   const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY
@@ -60,6 +69,9 @@ export async function parseBillWithClaude(
     )
   }
 
+  const pages = Array.isArray(images) ? images : [images]
+  if (pages.length === 0) throw new Error('No bill photos to read')
+
   onProgress?.({ status: 'AI is processing your bill…', progress: 0.2 })
 
   const MODELS = [
@@ -68,9 +80,15 @@ export async function parseBillWithClaude(
     'openrouter/auto',
   ]
 
+  const multiPageNote = pages.length > 1
+    ? `\n\nThis bill spans ${pages.length} photos provided in order. Merge them into ONE bill following the multi-photo rules.`
+    : ''
   const messageContent = [
-    { type: 'image_url', image_url: { url: `data:${mediaType};base64,${imageBase64}` } },
-    { type: 'text', text: BILL_AI_FORMAT_PROMPT },
+    ...pages.map((page) => ({
+      type: 'image_url',
+      image_url: { url: `data:${page.mediaType};base64,${page.base64}` },
+    })),
+    { type: 'text', text: BILL_AI_FORMAT_PROMPT + multiPageNote },
   ]
 
   let text = ''

@@ -9,6 +9,7 @@ import { Header } from '../components/shared/Header'
 import { UserManager } from '../components/admin/UserManager'
 import { Modal } from '../components/shared/Modal'
 import { toast } from '../components/shared/Toast'
+import { InviteLinkRow } from '../components/groups/InviteLink'
 import { useAppStore } from '../store/appStore'
 import { THEME_META, type Theme } from '../store/themeStore'
 import type { Session, User } from '../types'
@@ -21,7 +22,7 @@ export function AdminDashboard() {
   const navigate = useNavigate()
   const {
     sessions, pendingSessionIds, currentUser, updateSession, deleteSession,
-    users, billItems, selections, cloudReady, cloudSyncError,
+    users, billItems, selections, cloudReady, cloudSyncError, activeGroup,
   } = useAppStore()
   const [tab, setTab] = useState<Tab>('sessions')
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null)
@@ -47,7 +48,11 @@ export function AdminDashboard() {
 
   return (
     <Layout>
-      <Header title="BillWise Admin" subtitle={currentUser?.name} showLogout />
+      <Header
+        title={activeGroup ? activeGroup.name : 'BillWise Admin'}
+        subtitle={activeGroup ? `${currentUser?.name} · Group admin` : currentUser?.name}
+        showLogout
+      />
 
       {/* Tabs */}
       <div className="flex shrink-0 border-b border-line px-4 gap-1 pt-1">
@@ -163,7 +168,23 @@ export function AdminDashboard() {
         )}
 
         {tab === 'users' && (
-          <div className="p-4"><UserManager /></div>
+          <div className="p-4 space-y-4">
+            {activeGroup && (
+              <div className="rounded-2xl border border-primary/25 bg-primary/[0.06] overflow-hidden">
+                <div className="flex items-center gap-2 border-b border-primary/15 px-4 py-3">
+                  <Users size={13} className="text-primary" />
+                  <p className="text-xs font-medium uppercase tracking-wider text-primary">Invite to {activeGroup.name}</p>
+                </div>
+                <div className="p-4">
+                  <p className="mb-3 text-xs leading-relaxed text-fg-subtle">
+                    Anyone with this link can join your group and create their own profile — no admin steps needed.
+                  </p>
+                  <InviteLinkRow inviteCode={activeGroup.inviteCode} dense />
+                </div>
+              </div>
+            )}
+            <UserManager />
+          </div>
         )}
 
         {tab === 'settings' && (

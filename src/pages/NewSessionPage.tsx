@@ -4,14 +4,22 @@ import { Check, UserPlus, X, Loader2 } from 'lucide-react'
 import { Layout } from '../components/shared/Layout'
 import { Header } from '../components/shared/Header'
 import { Modal } from '../components/shared/Modal'
-import { BillUpload } from '../components/admin/BillUpload'
+import { BillUpload, type BillImageKind } from '../components/admin/BillUpload'
+import { playDoorTransition } from '../components/shared/DoorTransition'
 import { useAppStore } from '../store/appStore'
 import type { ParsedBill } from '../types'
 import { generateId } from '../services/calculations'
+import { initialFormattedImageBaseName } from '../services/billImageSync'
 import { toast } from '../components/shared/Toast'
 import clsx from 'clsx'
 
 type Step = 'upload' | 'participants'
+
+const CREATION_STEPS = [
+  'Creating the session',
+  'Saving people & bill items',
+  'Opening item selection',
+]
 
 export function NewSessionPage() {
   const navigate = useNavigate()
@@ -22,18 +30,20 @@ export function NewSessionPage() {
   const [step, setStep] = useState<Step>('upload')
   const [parsedBill, setParsedBill] = useState<ParsedBill | null>(null)
   const [imageDataUrl, setImageDataUrl] = useState('')
+  const [imageKind, setImageKind] = useState<BillImageKind>('photo')
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [showAddMember, setShowAddMember] = useState(false)
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberPin, setNewMemberPin] = useState('')
   const [isCreating, setIsCreating] = useState(false)
-  const [creationStep, setCreationStep] = useState('')
+  const [creationStepIdx, setCreationStepIdx] = useState(0)
 
   const regularUsers = users.filter((u) => u.role === 'user')
 
-  const handleBillParsed = (bill: ParsedBill, image?: string) => {
+  const handleBillParsed = (bill: ParsedBill, image?: string, kind: BillImageKind = 'photo') => {
     setParsedBill(bill)
     setImageDataUrl(image ?? '')
+    setImageKind(kind)
     setStep('participants')
   }
 
@@ -52,7 +62,7 @@ export function NewSessionPage() {
     if (isCreating) return
 
     setIsCreating(true)
-    setCreationStep('Creating the session…')
+    setCreationStepIdx(0)
     let createdSessionId = ''
     try {
       const session = await createSession({
@@ -68,31 +78,34 @@ export function NewSessionPage() {
       })
       createdSessionId = session.id
 
-      setCreationStep('Saving people and bill items…')
+      setCreationStepIdx(1)
       const billItems = parsedBill.items.map((item) => ({
         ...item,
         id: generateId(),
         sessionId: session.id,
       }))
 
+      // App-rendered bills get a versioned "formatted-*" name so later item
+      // edits can regenerate the stored image; real photos stay "original".
+      const imageBaseName = imageKind === 'formatted' ? initialFormattedImageBaseName() : 'original'
       await Promise.all([
         Promise.all(selectedUserIds.map((uid) => addParticipant(session.id, uid))),
         setBillItems(session.id, billItems),
-        imageDataUrl ? saveBillImage(session.id, imageDataUrl) : Promise.resolve(false),
+        imageDataUrl ? saveBillImage(session.id, imageDataUrl, imageBaseName) : Promise.resolve(false),
       ])
 
-      setCreationStep('Opening item selection…')
+      setCreationStepIdx(2)
       await updateSession(session.id, { isPublic: true })
 
       toast.success(`Session created — ${session.orderId}`)
-      navigate(`/session/${session.id}`)
+      playDoorTransition(() => navigate(`/session/${session.id}`))
     } catch {
       if (createdSessionId) {
         deleteSession(createdSessionId).catch(() => undefined)
       }
       toast.error('Session could not be saved. Check the Supabase connection and try again.')
       setIsCreating(false)
-      setCreationStep('')
+      setCreationStepIdx(0)
     }
   }
 
@@ -275,16 +288,47 @@ export function NewSessionPage() {
         size="sm"
         dismissible={false}
       >
-        <div className="space-y-4 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10">
-            <Loader2 size={24} className="animate-spin text-primary" />
+        <div className="space-y-5">
+          <div className="space-y-1">
+            {CREATION_STEPS.map((label, i) => {
+              const done = i < creationStepIdx
+              const active = i === creationStepIdx
+              return (
+                <div
+                  key={label}
+                  className={clsx(
+                    'anim-step-in flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors duration-300',
+                    active && 'bg-primary/[0.07]',
+                  )}
+                  style={{ animationDelay: `${i * 80}ms` }}
+                >
+                  <div className={clsx(
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,color] duration-300',
+                    done
+                      ? 'border-success/40 bg-success/15 text-success'
+                      : active
+                        ? 'anim-ring-pulse border-primary/50 bg-primary/15 text-primary'
+                        : 'border-line bg-surface text-fg-faint',
+                  )}>
+                    {done
+                      ? <Check size={13} strokeWidth={3} />
+                      : active
+                        ? <Loader2 size={13} className="animate-spin" />
+                        : <span className="text-[10px] font-bold">{i + 1}</span>}
+                  </div>
+                  <span className={clsx(
+                    'text-sm font-medium transition-colors duration-300',
+                    done ? 'text-fg-subtle line-through decoration-fg-faint/50' : active ? 'text-fg' : 'text-fg-faint',
+                  )}>
+                    {label}
+                  </span>
+                </div>
+              )
+            })}
           </div>
-          <div>
-            <p className="text-sm font-semibold text-fg">{creationStep || 'Saving your bill…'}</p>
-            <p className="mt-1 text-xs leading-relaxed text-fg-subtle">
-              Please keep this screen open. The item selection page will open automatically.
-            </p>
-          </div>
+          <p className="text-center text-xs leading-relaxed text-fg-subtle">
+            Please keep this screen open — item selection opens automatically.
+          </p>
         </div>
       </Modal>
     </Layout>

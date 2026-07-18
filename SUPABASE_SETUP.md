@@ -209,6 +209,42 @@ from item_selections
 group by item_id;
 ```
 
+## Step 3b: Groups (one-time migration)
+
+Groups let one person register a space with their email and invite others with a
+single link (`/join/<code>`). Everything — members, bills, splits — is scoped to
+the group. Existing data stays in the legacy "shared space" (`group_id = null`).
+
+Run the SQL in `SUPABASE_MIGRATION_GROUPS.sql` once in the SQL Editor:
+
+```sql
+create table if not exists public.groups (
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null,
+  invite_code  text not null unique,
+  owner_email  text not null,
+  created_at   timestamptz default now()
+);
+
+alter table public.users
+  add column if not exists group_id uuid references public.groups(id) on delete cascade;
+
+alter table public.sessions
+  add column if not exists group_id uuid references public.groups(id) on delete cascade;
+
+create index if not exists users_group_idx    on public.users(group_id);
+create index if not exists sessions_group_idx on public.sessions(group_id);
+
+alter table public.groups enable row level security;
+
+drop policy if exists "allow all anon" on public.groups;
+create policy "allow all anon" on public.groups
+  for all using (true) with check (true);
+```
+
+Until this migration runs, the app silently falls back to legacy single-space
+behaviour and the "Create a group" flow explains that the upgrade is needed.
+
 ## Step 4: Storage bucket (for bill images)
 
 Run this once in the SQL Editor:
@@ -240,6 +276,11 @@ create policy "allow anon bill image updates"
 on storage.objects for update
 using (bucket_id = 'bill-images')
 with check (bucket_id = 'bill-images');
+
+-- Lets the app clean up superseded formatted bill images after edits.
+create policy "allow anon bill image deletes"
+on storage.objects for delete
+using (bucket_id = 'bill-images');
 ```
 
 Enable Realtime for cross-device session and participant updates in Database → Replication, or run:
