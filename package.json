@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "migrate:bill-images": "node --env-file=.env scripts/migrateInlineBillImages.mjs",
+    "migrate:bill-images:apply": "node --env-file=.env scripts/migrateInlineBillImages.mjs --apply"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.2",

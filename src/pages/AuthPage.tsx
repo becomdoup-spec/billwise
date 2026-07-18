@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { dbGetUsers, dbGetSessions, dbGetAllBillItems, dbGetAllSelections } from '../lib/db'
 import {
   AlertCircle, ArrowLeft, Loader2, ReceiptText, UserRound,
   Clock, CheckCircle, ChevronRight, UserRoundPlus, DoorOpen,
@@ -36,7 +35,7 @@ function getAvatarStyle(user: User, allUsers: User[]) {
 
 export function AuthPage() {
   const navigate = useNavigate()
-  const { users, setCurrentUser, cloudReady, cloudSyncError, sessions, requirePin, showCompletedBills, billItems, selections, hydrateFromSupabase, hydrateBillItemsFromSupabase, hydrateSelectionsFromSupabase, activeGroup, activeGroupId, legacyBypass, setActiveGroup } = useAppStore()
+  const { users, setCurrentUser, cloudReady, cloudSyncError, sessions, requirePin, showCompletedBills, billItems, selections, activeGroup, activeGroupId, legacyBypass, setActiveGroup } = useAppStore()
   const [step, setStep] = useState<Step>('profiles')
   const [role, setRole] = useState<Role>('user')
   const [selectedUserId, setSelectedUserId] = useState('')
@@ -68,26 +67,6 @@ export function AuthPage() {
   }
 
   useEffect(() => () => window.clearTimeout(splitPopupTimerRef.current), [])
-
-  // Force-refresh all data every time the landing page is visible,
-  // scoped to the active group so spaces never bleed into each other.
-  useEffect(() => {
-    let cancelled = false
-    async function refresh() {
-      try {
-        const [freshUsers, freshSessions, freshItems, freshSelections] = await Promise.all([
-          dbGetUsers(activeGroupId), dbGetSessions(activeGroupId), dbGetAllBillItems(), dbGetAllSelections(),
-        ])
-        if (cancelled) return
-        const sessionIds = new Set(freshSessions.map((s) => s.id))
-        hydrateFromSupabase(freshUsers, freshSessions)
-        hydrateBillItemsFromSupabase(freshItems.filter((item) => sessionIds.has(item.sessionId)))
-        hydrateSelectionsFromSupabase(freshSelections.filter((sel) => sessionIds.has(sel.sessionId)))
-      } catch { /* polling in useSupabaseInit will catch it */ }
-    }
-    refresh()
-    return () => { cancelled = true }
-  }, [activeGroupId])
 
   const regularUsers = users.filter((u) => u.role === 'user')
   const adminUsers = users.filter((u) => u.role === 'admin')

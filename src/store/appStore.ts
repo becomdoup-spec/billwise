@@ -3,7 +3,7 @@ import type { User, Session, BillItem, ItemSelection, Group } from '../types'
 import { generateId, generateInviteCode, getSessionCompletionState, hashPin } from '../services/calculations'
 import {
   dbFindUserByPin, dbCreateUser, dbUpdateUserPin, dbDeleteUser, dbGetUsers,
-  dbCreateSession, dbUpdateSession, dbDeleteSession, dbUploadBillImage, dbAddParticipant, dbRemoveParticipant,
+  dbCreateSession, dbUpdateSession, dbDeleteSession, dbUploadBillImage, dbDeleteBillImage, dbAddParticipant, dbRemoveParticipant,
   dbSetBillItems, dbCreateBillItem, dbUpdateBillItem, dbDeleteBillItem,
   dbUpsertSelection, dbDeleteSelection, dbLockUserSelections, dbUnlockUserSelections,
   dbSetAppSetting, dbCreateGroup,
@@ -106,11 +106,18 @@ interface AppStore {
   setCloudSyncState: (ready: boolean, error?: string) => void
   hydrateBillItemsFromSupabase: (items: BillItem[]) => void
   hydrateSelectionsFromSupabase: (selections: ItemSelection[]) => void
+  upsertUserFromRealtime: (user: User) => void
+  removeUserFromRealtime: (userId: string) => void
+  upsertSessionFromRealtime: (session: Session) => void
+  removeSessionFromRealtime: (sessionId: string) => void
   updateSessionFromRealtime: (sessionId: string, data: Partial<Session>) => void
   setSelectionsForSession: (sessionId: string, sels: ItemSelection[]) => void
+  upsertBillItemFromRealtime: (item: BillItem) => void
+  removeBillItemFromRealtime: (sessionId: string, itemId: string) => void
   updateBillItemFromRealtime: (sessionId: string, itemId: string, data: Partial<BillItem>) => void
   upsertSelectionFromRealtime: (sel: ItemSelection) => void
   removeSelectionFromRealtime: (sessionId: string, userId: string, itemId: string) => void
+  setParticipantFromRealtime: (sessionId: string, userId: string, present: boolean, locked: boolean) => void
   setParticipantLockFromRealtime: (sessionId: string, userId: string, locked: boolean) => void
 }
 
@@ -493,14 +500,20 @@ export const useAppStore = create<AppStore>((set, get) => ({
       saveBillImage: async (sessionId, imageDataUrl, fileBaseName = 'original') => {
         requireCloudConnection()
         const path = await dbUploadBillImage(sessionId, imageDataUrl, fileBaseName)
-        const storedImage = path ?? imageDataUrl
+        try {
+          await dbUpdateSession(sessionId, { billImageUrl: path })
+        } catch (error) {
+          await dbDeleteBillImage(path)
+          throw error
+        }
         set((s) => ({
           sessions: s.sessions.map((sess) =>
-            sess.id === sessionId ? { ...sess, billImageUrl: storedImage } : sess,
+            sess.id === sessionId
+              ? { ...sess, billImageUrl: path, billImageBase64: undefined }
+              : sess,
           ),
         }))
-        await dbUpdateSession(sessionId, { billImageUrl: storedImage })
-        return Boolean(path)
+        return true
       },
 
       addParticipant: async (sessionId, userId) => {
@@ -918,6 +931,67 @@ export const useAppStore = create<AppStore>((set, get) => ({
         }))
       },
 
+      upsertUserFromRealtime: (user) => {
+        set((s) => ({
+          users: s.users.some((existing) => existing.id === user.id)
+            ? s.users.map((existing) => existing.id === user.id ? user : existing)
+            : [...s.users, user],
+          currentUser: s.currentUser?.id === user.id ? user : s.currentUser,
+        }))
+      },
+
+      removeUserFromRealtime: (userId) => {
+        set((s) => ({
+          users: s.users.filter((user) => user.id !== userId),
+          currentUser: s.currentUser?.id === userId ? null : s.currentUser,
+        }))
+      },
+
+      upsertSessionFromRealtime: (session) => {
+        set((s) => {
+          const existing = s.sessions.find((candidate) => candidate.id === session.id)
+          const merged = existing
+            ? {
+                ...existing,
+                ...session,
+                billImageUrl: session.billImageUrl ?? existing.billImageUrl,
+                billImageBase64: existing.billImageBase64,
+                participantIds: existing.participantIds,
+                lockedParticipantIds: existing.lockedParticipantIds,
+              }
+            : session
+          return {
+            sessions: [merged, ...s.sessions.filter((candidate) => candidate.id !== session.id)],
+            pendingSessionIds: session.isPublic
+              ? s.pendingSessionIds.filter((sessionId) => sessionId !== session.id)
+              : s.pendingSessionIds,
+          }
+        })
+      },
+
+      removeSessionFromRealtime: (sessionId) => {
+        set((s) => {
+          const billItems = { ...s.billItems }
+          delete billItems[sessionId]
+          const pendingSelectionMutations = Object.fromEntries(
+            Object.entries(s.pendingSelectionMutations)
+              .filter(([, mutation]) => mutation.sessionId !== sessionId),
+          )
+          const pendingParticipantLocks = Object.fromEntries(
+            Object.entries(s.pendingParticipantLocks)
+              .filter(([, pendingLock]) => pendingLock.sessionId !== sessionId),
+          )
+          return {
+            sessions: s.sessions.filter((session) => session.id !== sessionId),
+            pendingSessionIds: s.pendingSessionIds.filter((id) => id !== sessionId),
+            billItems,
+            selections: s.selections.filter((selection) => selection.sessionId !== sessionId),
+            pendingSelectionMutations,
+            pendingParticipantLocks,
+          }
+        })
+      },
+
       updateSessionFromRealtime: (sessionId, data) => {
         set((s) => ({
           sessions: s.sessions.map((sess) =>
@@ -937,6 +1011,29 @@ export const useAppStore = create<AppStore>((set, get) => ({
             pendingSelectionMutations: reconciled.pendingSelectionMutations,
           }
         })
+      },
+
+      upsertBillItemFromRealtime: (item) => {
+        set((s) => {
+          const items = s.billItems[item.sessionId] ?? []
+          return {
+            billItems: {
+              ...s.billItems,
+              [item.sessionId]: items.some((existing) => existing.id === item.id)
+                ? items.map((existing) => existing.id === item.id ? item : existing)
+                : [...items, item],
+            },
+          }
+        })
+      },
+
+      removeBillItemFromRealtime: (sessionId, itemId) => {
+        set((s) => ({
+          billItems: {
+            ...s.billItems,
+            [sessionId]: (s.billItems[sessionId] ?? []).filter((item) => item.id !== itemId),
+          },
+        }))
       },
 
       updateBillItemFromRealtime: (sessionId, itemId, data) => {
@@ -977,6 +1074,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
           if (mutation?.desiredSelection) return s
           return {
             selections: replaceSelection(s.selections, key, null),
+          }
+        })
+      },
+
+      setParticipantFromRealtime: (sessionId, userId, present, locked) => {
+        set((s) => {
+          const key = participantLockKey(sessionId, userId)
+          const pendingParticipantLocks = { ...s.pendingParticipantLocks }
+          const pendingLock = pendingParticipantLocks[key]
+          if (pendingLock && pendingLock.locked === locked) delete pendingParticipantLocks[key]
+          const effectiveLocked = pendingLock?.locked ?? locked
+
+          return {
+            sessions: s.sessions.map((session) => {
+              if (session.id !== sessionId) return session
+              const participantIds = present
+                ? [...new Set([...session.participantIds, userId])]
+                : session.participantIds.filter((id) => id !== userId)
+              const lockedParticipantIds = present && effectiveLocked
+                ? [...new Set([...session.lockedParticipantIds, userId])]
+                : session.lockedParticipantIds.filter((id) => id !== userId)
+              return { ...session, participantIds, lockedParticipantIds }
+            }),
+            pendingParticipantLocks,
           }
         })
       },

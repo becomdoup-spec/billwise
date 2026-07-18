@@ -55,9 +55,12 @@ async function regenerate(sessionId: string): Promise<void> {
   // A fresh filename per version → bill_image_url changes → realtime pushes the
   // new image to every open device (and busts any cached signed URL).
   const path = await dbUploadBillImage(sessionId, dataUrl, `${FORMATTED_IMAGE_BASENAME}-${Date.now()}`)
-  if (!path) return
-
-  await dbUpdateSession(sessionId, { billImageUrl: path })
+  try {
+    await dbUpdateSession(sessionId, { billImageUrl: path })
+  } catch (error) {
+    await dbDeleteBillImage(path)
+    throw error
+  }
   useAppStore.getState().updateSessionFromRealtime(sessionId, { billImageUrl: path })
   if (previousPath && previousPath !== path) void dbDeleteBillImage(previousPath)
 }

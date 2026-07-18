@@ -5,6 +5,15 @@
 import { supabase } from './supabase'
 import type { User, Session, BillItem, ItemSelection, Group } from '../types'
 
+const GROUP_COLUMNS = 'id,name,invite_code,owner_email,created_at'
+const USER_COLUMNS = 'id,name,pin_hash,role,group_id,created_at'
+const LEGACY_USER_COLUMNS = 'id,name,pin_hash,role,created_at'
+const SESSION_COLUMNS = 'id,order_id,group_id,restaurant_name,date,status,is_public,subtotal,cgst,sgst,total_amount,created_by,created_at,completed_at'
+const LEGACY_SESSION_COLUMNS = 'id,order_id,restaurant_name,date,status,is_public,subtotal,cgst,sgst,total_amount,created_by,created_at,completed_at'
+const BILL_ITEM_COLUMNS = 'id,session_id,name,quantity,unit_price,total_price,category'
+const SELECTION_COLUMNS = 'id,session_id,user_id,item_id,portion_percentage,locked_at'
+const SESSION_QUERY_CHUNK_SIZE = 50
+
 // ── Groups schema availability ────────────────────────────────────
 // The groups feature needs a one-time migration (see SUPABASE_SETUP.md).
 // Until it runs, every group-aware query falls back to legacy behaviour
@@ -29,7 +38,7 @@ function scopeToGroup<T extends { eq: any; is: any }>(query: T, groupId: string 
 
 // ── Row → local type mappers ──────────────────────────────────────
 
-function rowToGroup(r: Record<string, unknown>): Group {
+export function rowToGroup(r: Record<string, unknown>): Group {
   return {
     id: r.id as string,
     name: r.name as string,
@@ -39,7 +48,7 @@ function rowToGroup(r: Record<string, unknown>): Group {
   }
 }
 
-function rowToUser(r: Record<string, unknown>): User {
+export function rowToUser(r: Record<string, unknown>): User {
   return {
     id: r.id as string,
     name: r.name as string,
@@ -50,7 +59,7 @@ function rowToUser(r: Record<string, unknown>): User {
   }
 }
 
-function rowToSession(
+export function rowToSession(
   r: Record<string, unknown>,
   participantIds: string[],
   lockedParticipantIds: string[],
@@ -76,7 +85,7 @@ function rowToSession(
   }
 }
 
-function rowToItem(r: Record<string, unknown>): BillItem {
+export function rowToItem(r: Record<string, unknown>): BillItem {
   return {
     id: r.id as string,
     sessionId: r.session_id as string,
@@ -88,7 +97,7 @@ function rowToItem(r: Record<string, unknown>): BillItem {
   }
 }
 
-function rowToSelection(r: Record<string, unknown>): ItemSelection {
+export function rowToSelection(r: Record<string, unknown>): ItemSelection {
   return {
     id: r.id as string,
     sessionId: r.session_id as string,
@@ -126,7 +135,7 @@ export async function dbCreateGroup(group: Group): Promise<void> {
 
 export async function dbGetGroupByCode(inviteCode: string): Promise<Group | null> {
   if (!supabase) return null
-  const { data, error } = await supabase.from('groups').select('*').eq('invite_code', inviteCode).maybeSingle()
+  const { data, error } = await supabase.from('groups').select(GROUP_COLUMNS).eq('invite_code', inviteCode).maybeSingle()
   if (error) {
     console.error('[db] getGroupByCode', error)
     if (isMissingSchemaError(error)) { groupsSchemaMissingFlag = true; throw new GroupsSchemaMissingError() }
@@ -151,7 +160,7 @@ export async function dbFindGroupByInput(rawInput: string): Promise<Group | null
   }
 
   // Fall back to an exact (case-insensitive) name match.
-  const { data, error } = await supabase.from('groups').select('*').ilike('name', trimmed)
+  const { data, error } = await supabase.from('groups').select(GROUP_COLUMNS).ilike('name', trimmed)
   if (error) {
     console.error('[db] findGroupByInput', error)
     if (isMissingSchemaError(error)) { groupsSchemaMissingFlag = true; throw new GroupsSchemaMissingError() }
@@ -165,7 +174,7 @@ export async function dbFindGroupByInput(rawInput: string): Promise<Group | null
 
 export async function dbGetGroupById(id: string): Promise<Group | null> {
   if (!supabase) return null
-  const { data, error } = await supabase.from('groups').select('*').eq('id', id).maybeSingle()
+  const { data, error } = await supabase.from('groups').select(GROUP_COLUMNS).eq('id', id).maybeSingle()
   if (error) {
     console.error('[db] getGroupById', error)
     if (isMissingSchemaError(error)) { groupsSchemaMissingFlag = true; return null }
@@ -184,12 +193,17 @@ export async function dbGetGroupById(id: string): Promise<Group | null> {
 export async function dbGetUsers(groupId?: string | null): Promise<User[]> {
   if (!supabase) return []
   if (groupId !== undefined && !groupsSchemaMissingFlag) {
-    const { data, error } = await scopeToGroup(supabase.from('users').select('*'), groupId).order('created_at')
+    const { data, error } = await scopeToGroup(supabase.from('users').select(USER_COLUMNS), groupId).order('created_at')
     if (!error) return (data ?? []).map(rowToUser)
     if (!isMissingSchemaError(error)) { console.error('[db] getUsers', error); throw error }
     groupsSchemaMissingFlag = true // fall through to the unscoped query
   }
-  const { data, error } = await supabase.from('users').select('*').order('created_at')
+  if (groupsSchemaMissingFlag) {
+    const { data, error } = await supabase.from('users').select(LEGACY_USER_COLUMNS).order('created_at')
+    if (error) { console.error('[db] getUsers', error); throw error }
+    return (data ?? []).map(rowToUser)
+  }
+  const { data, error } = await supabase.from('users').select(USER_COLUMNS).order('created_at')
   if (error) { console.error('[db] getUsers', error); throw error }
   return (data ?? []).map(rowToUser)
 }
@@ -198,13 +212,17 @@ export async function dbFindUserByPin(pinHash: string, groupId?: string | null):
   if (!supabase) return null
   if (groupId !== undefined && !groupsSchemaMissingFlag) {
     const { data, error } = await scopeToGroup(
-      supabase.from('users').select('*').eq('pin_hash', pinHash),
+      supabase.from('users').select(USER_COLUMNS).eq('pin_hash', pinHash),
       groupId,
     ).maybeSingle()
     if (!error) return data ? rowToUser(data) : null
     if (isMissingSchemaError(error)) groupsSchemaMissingFlag = true
   }
-  const { data } = await supabase.from('users').select('*').eq('pin_hash', pinHash).maybeSingle()
+  if (groupsSchemaMissingFlag) {
+    const { data } = await supabase.from('users').select(LEGACY_USER_COLUMNS).eq('pin_hash', pinHash).maybeSingle()
+    return data ? rowToUser(data) : null
+  }
+  const { data } = await supabase.from('users').select(USER_COLUMNS).eq('pin_hash', pinHash).maybeSingle()
   return data ? rowToUser(data) : null
 }
 
@@ -243,34 +261,54 @@ export async function dbDeleteUser(userId: string): Promise<void> {
 
 export async function dbGetSessions(groupId?: string | null): Promise<Session[]> {
   if (!supabase) return []
-  const sessionsQuery = groupId !== undefined && !groupsSchemaMissingFlag
-    ? scopeToGroup(supabase.from('sessions').select('*'), groupId).order('created_at', { ascending: false })
-    : supabase.from('sessions').select('*').order('created_at', { ascending: false })
-  let [sessRes, lockedPartRes] = await Promise.all([
-    sessionsQuery,
-    supabase.from('session_participants').select('session_id, user_id, locked_at'),
-  ])
+  let sessRes
+  if (groupId !== undefined && !groupsSchemaMissingFlag) {
+    sessRes = await scopeToGroup(
+      supabase.from('sessions').select(SESSION_COLUMNS),
+      groupId,
+    ).order('created_at', { ascending: false })
+  } else if (groupsSchemaMissingFlag) {
+    sessRes = await supabase.from('sessions').select(LEGACY_SESSION_COLUMNS).order('created_at', { ascending: false })
+  } else {
+    sessRes = await supabase.from('sessions').select(SESSION_COLUMNS).order('created_at', { ascending: false })
+  }
   if (sessRes.error && isMissingSchemaError(sessRes.error)) {
     groupsSchemaMissingFlag = true
-    sessRes = await supabase.from('sessions').select('*').order('created_at', { ascending: false })
+    sessRes = await supabase.from('sessions').select(LEGACY_SESSION_COLUMNS).order('created_at', { ascending: false })
   }
   if (sessRes.error) { console.error('[db] getSessions', sessRes.error); throw sessRes.error }
 
-  let partRes = lockedPartRes
-  if (lockedPartRes.error?.code === '42703') {
-    console.error('[db] session_participants.locked_at is missing; run the migration in SUPABASE_SETUP.md')
-    partRes = await supabase.from('session_participants').select('session_id, user_id')
+  const sessionIds = (sessRes.data ?? []).map((session) => session.id as string)
+  let participants: Array<Record<string, unknown>> = []
+  if (sessionIds.length) {
+    const partRes = await supabase
+      .from('session_participants')
+      .select('session_id, user_id, locked_at')
+      .in('session_id', sessionIds)
+    if (partRes.error?.code === '42703') {
+      console.error('[db] session_participants.locked_at is missing; run the migration in SUPABASE_SETUP.md')
+      const legacyPartRes = await supabase
+        .from('session_participants')
+        .select('session_id, user_id')
+        .in('session_id', sessionIds)
+      if (legacyPartRes.error) { console.error('[db] getSessionParticipants', legacyPartRes.error); throw legacyPartRes.error }
+      participants = legacyPartRes.data ?? []
+    } else {
+      if (partRes.error) { console.error('[db] getSessionParticipants', partRes.error); throw partRes.error }
+      participants = partRes.data ?? []
+    }
   }
-  if (partRes.error) { console.error('[db] getSessionParticipants', partRes.error); throw partRes.error }
 
   const participantMap: Record<string, string[]> = {}
   const lockedParticipantMap: Record<string, string[]> = {}
-  for (const p of partRes.data ?? []) {
-    if (!participantMap[p.session_id]) participantMap[p.session_id] = []
-    participantMap[p.session_id].push(p.user_id)
+  for (const p of participants) {
+    const sessionId = p.session_id as string
+    const userId = p.user_id as string
+    if (!participantMap[sessionId]) participantMap[sessionId] = []
+    participantMap[sessionId].push(userId)
     if (p.locked_at) {
-      if (!lockedParticipantMap[p.session_id]) lockedParticipantMap[p.session_id] = []
-      lockedParticipantMap[p.session_id].push(p.user_id)
+      if (!lockedParticipantMap[sessionId]) lockedParticipantMap[sessionId] = []
+      lockedParticipantMap[sessionId].push(userId)
     }
   }
 
@@ -279,6 +317,18 @@ export async function dbGetSessions(groupId?: string | null): Promise<Session[]>
     participantMap[r.id] ?? [],
     lockedParticipantMap[r.id] ?? [],
   ))
+}
+
+/** Load the small Storage object path only when a session page needs the receipt. */
+export async function dbGetSessionBillImagePath(sessionId: string): Promise<string | null> {
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('bill_image_url')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (error) { console.error('[db] getSessionBillImagePath', error); throw error }
+  return (data?.bill_image_url as string | null | undefined) ?? null
 }
 
 export async function dbCreateSession(session: Session): Promise<void> {
@@ -335,10 +385,10 @@ export async function dbUploadBillImage(
   sessionId: string,
   imageDataUrl: string,
   fileBaseName = 'original',
-): Promise<string | null> {
-  if (!supabase) return null
+): Promise<string> {
+  if (!supabase) throw new Error('Supabase is not configured for this deployment')
   const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/)
-  if (!match) return null
+  if (!match) throw new Error('Bill image is not a valid base64 data URL')
 
   const contentType = match[1]
   const extension = contentType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
@@ -348,7 +398,7 @@ export async function dbUploadBillImage(
     contentType,
     upsert: true,
   })
-  if (error) { console.error('[db] uploadBillImage', error); return null }
+  if (error) { console.error('[db] uploadBillImage', error); throw error }
   return path
 }
 
@@ -393,16 +443,24 @@ export async function dbRemoveParticipant(sessionId: string, userId: string): Pr
 
 export async function dbGetBillItems(sessionId: string): Promise<BillItem[]> {
   if (!supabase) return []
-  const { data, error } = await supabase.from('bill_items').select('*').eq('session_id', sessionId)
+  const { data, error } = await supabase.from('bill_items').select(BILL_ITEM_COLUMNS).eq('session_id', sessionId)
   if (error) { console.error('[db] getBillItems', error); return [] }
   return (data ?? []).map(rowToItem)
 }
 
-export async function dbGetAllBillItems(): Promise<BillItem[]> {
-  if (!supabase) return []
-  const { data, error } = await supabase.from('bill_items').select('*')
-  if (error) { console.error('[db] getAllBillItems', error); throw error }
-  return (data ?? []).map(rowToItem)
+export async function dbGetBillItemsForSessions(sessionIds: string[]): Promise<BillItem[]> {
+  if (!supabase || !sessionIds.length) return []
+  const client = supabase
+  const chunks = Array.from(
+    { length: Math.ceil(sessionIds.length / SESSION_QUERY_CHUNK_SIZE) },
+    (_, index) => sessionIds.slice(index * SESSION_QUERY_CHUNK_SIZE, (index + 1) * SESSION_QUERY_CHUNK_SIZE),
+  )
+  const responses = await Promise.all(chunks.map((ids) => (
+    client.from('bill_items').select(BILL_ITEM_COLUMNS).in('session_id', ids)
+  )))
+  const error = responses.find((response) => response.error)?.error
+  if (error) { console.error('[db] getBillItemsForSessions', error); throw error }
+  return responses.flatMap((response) => response.data ?? []).map(rowToItem)
 }
 
 export async function dbSetBillItems(sessionId: string, items: BillItem[]): Promise<void> {
@@ -456,16 +514,24 @@ export async function dbDeleteBillItem(itemId: string): Promise<void> {
 
 export async function dbGetSelections(sessionId: string): Promise<ItemSelection[]> {
   if (!supabase) return []
-  const { data, error } = await supabase.from('item_selections').select('*').eq('session_id', sessionId)
+  const { data, error } = await supabase.from('item_selections').select(SELECTION_COLUMNS).eq('session_id', sessionId)
   if (error) { console.error('[db] getSelections', error); return [] }
   return (data ?? []).map(rowToSelection)
 }
 
-export async function dbGetAllSelections(): Promise<ItemSelection[]> {
-  if (!supabase) return []
-  const { data, error } = await supabase.from('item_selections').select('*')
-  if (error) { console.error('[db] getAllSelections', error); throw error }
-  return (data ?? []).map(rowToSelection)
+export async function dbGetSelectionsForSessions(sessionIds: string[]): Promise<ItemSelection[]> {
+  if (!supabase || !sessionIds.length) return []
+  const client = supabase
+  const chunks = Array.from(
+    { length: Math.ceil(sessionIds.length / SESSION_QUERY_CHUNK_SIZE) },
+    (_, index) => sessionIds.slice(index * SESSION_QUERY_CHUNK_SIZE, (index + 1) * SESSION_QUERY_CHUNK_SIZE),
+  )
+  const responses = await Promise.all(chunks.map((ids) => (
+    client.from('item_selections').select(SELECTION_COLUMNS).in('session_id', ids)
+  )))
+  const error = responses.find((response) => response.error)?.error
+  if (error) { console.error('[db] getSelectionsForSessions', error); throw error }
+  return responses.flatMap((response) => response.data ?? []).map(rowToSelection)
 }
 
 export async function dbUpsertSelection(sel: ItemSelection): Promise<void> {
@@ -533,11 +599,15 @@ export async function dbGetAppSetting(key: string): Promise<string | null> {
   return data ? (data.value as string) : null
 }
 
+export async function dbGetAppSettings(keys: string[]): Promise<Record<string, string>> {
+  if (!supabase || !keys.length) return {}
+  const { data, error } = await supabase.from('app_settings').select('key, value').in('key', keys)
+  if (error) { console.error('[db] getAppSettings', error); throw error }
+  return Object.fromEntries((data ?? []).map((setting) => [setting.key as string, setting.value as string]))
+}
+
 export async function dbSetAppSetting(key: string, value: string): Promise<void> {
   if (!supabase) return
   const { error } = await supabase.from('app_settings').upsert({ key, value })
   if (error) { console.error('[db] setAppSetting', error); throw error }
 }
-
-// Re-export rowToSelection for use in realtime subscription
-export { rowToSelection }
